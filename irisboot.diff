@@ -1,0 +1,3159 @@
+diff -Naru src.orig/distrib/sets/lists/base/md.sgimips src/distrib/sets/lists/base/md.sgimips
+--- src.orig/distrib/sets/lists/base/md.sgimips	2018-08-19 04:36:30.730333999 +0000
++++ src/distrib/sets/lists/base/md.sgimips	2018-08-19 06:43:37.106325997 +0000
+@@ -1,5 +1,7 @@
+ # $NetBSD: md.sgimips,v 1.11 2014/08/06 12:15:01 martin Exp $
+ ./usr/mdec/aoutboot				base-sysutil-bin
++./usr/mdec/irisboot				base-sysutil-bin
++./usr/mdec/ip12boot				base-sysutil-bin
+ ./usr/mdec/ip2xboot				base-sysutil-bin
+ ./usr/mdec/ip30boot				base-sysutil-bin
+ ./usr/mdec/ip3xboot				base-sysutil-bin
+diff -Naru src.orig/sys/arch/sgimips/README.IPn src/sys/arch/sgimips/README.IPn
+--- src.orig/sys/arch/sgimips/README.IPn	2018-08-19 04:42:21.793008998 +0000
++++ src/sys/arch/sgimips/README.IPn	2018-08-19 06:45:10.074523997 +0000
+@@ -30,6 +30,7 @@
+ 
+ Architecture	ABI	Bootstrap Load Address	Kernel Load Address
+ ------------	---	----------------------	-------------------
++IP12			32	0x80368000		0x80002000
+ IP19 IP21 IP25	32	0x80004000		0x80100000
+ IP19 IP21 IP25	64	0xa800000000004000	0xa800000000180000
+ IP20 IP22 IP24	32	0x88002000		0x88069000
+diff -Naru src.orig/sys/arch/sgimips/TODO src/sys/arch/sgimips/TODO
+--- src.orig/sys/arch/sgimips/TODO	2018-08-19 04:42:21.794538998 +0000
++++ src/sys/arch/sgimips/TODO	2018-08-19 06:45:35.401962997 +0000
+@@ -6,7 +6,6 @@
+ 
+ (sekiya)
+ * grtwo needs cursor and hardware color fill support
+-* ip12 needs ROM-based bootloader
+ * hpc devices need real probe routines
+ * port newport driver to x.org
+ 
+diff -Naru src.orig/sys/arch/sgimips/stand/Makefile src/sys/arch/sgimips/stand/Makefile
+--- src.orig/sys/arch/sgimips/stand/Makefile	2018-08-19 04:42:21.784891999 +0000
++++ src/sys/arch/sgimips/stand/Makefile	2018-08-19 06:46:43.361858997 +0000
+@@ -1,5 +1,5 @@
+ #	$NetBSD: Makefile,v 1.5 2005/12/11 12:18:58 christos Exp $
+ 
+-SUBDIR=	boot boot64 sgivol
++SUBDIR=	boot boot64 bootiris sgivol
+ 
+ .include <bsd.subdir.mk>
+diff -Naru src.orig/sys/arch/sgimips/stand/Makefile.booters src/sys/arch/sgimips/stand/Makefile.booters
+--- src.orig/sys/arch/sgimips/stand/Makefile.booters	2018-08-19 04:42:21.784238999 +0000
++++ src/sys/arch/sgimips/stand/Makefile.booters	2018-08-19 06:51:08.724856997 +0000
+@@ -22,7 +22,11 @@
+ realall: ${PROG}
+ 
+ .PATH:		${.CURDIR}/../common
++.if defined(PRE_ARCS)
++# XXX ?
++.else
+ .PATH.S:	${S}/dev/arcbios
++.endif
+ AFLAGS+=	-D_LOCORE -D_KERNEL -mno-abicalls
+ CPPFLAGS+=	-nostdinc -D_STANDALONE -DNO_ABICALLS -I${.OBJDIR} -I${S}
+ # compiler flags for smallest code size
+@@ -40,13 +44,18 @@
+ 
+ CPPFLAGS+=	-Dsgimips
+ 
++.if defined(PRE_ARCS)
++# XXX ?
++.else
+ .include "${S}/dev/arcbios/Makefile.inc"
++.endif
+ 
+ # We load the kernel at 420K in from the start of RAM to give the boot
+ # loader plenty of breathing room.  Load the boot loader starting at
+ # the second page of RAM.
+ # A warm thank-you to SGI for making load addresses different :)
+ LOAD_ADDRESS?=		0x88002000
++LOAD_ADDRESS_IP12?=	0x80368000
+ LOAD_ADDRESS_IP32?=	0x80002000
+ 
+ .include "${S}/conf/newvers_stand.mk"
+diff -Naru src.orig/sys/arch/sgimips/stand/bootiris/Makefile src/sys/arch/sgimips/stand/bootiris/Makefile
+--- src.orig/sys/arch/sgimips/stand/bootiris/Makefile	1970-01-01 00:00:00.000000000 +0000
++++ src/sys/arch/sgimips/stand/bootiris/Makefile	2018-08-19 08:47:14.119219992 +0000
+@@ -0,0 +1,58 @@
++#	$NetBSD$
++
++# Silicon Graphics "IRIS" series MIPS processors machine.
++STRIPFLAG=
++# If you try to use ARCBIOS(Indy or Indigo R4000) machine, Please comment it out!
++# Be sure to edit /sgimips/stand/common/iris_machdep.h!
++PRE_ARCS= yes
++
++.if defined(PRE_ARCS)
++SRCS=   iris_start.S 
++.else
++SRCS=   start.S arcbios_calls.S
++.endif
++
++SRCS+=  iris_boot.c
++SRCS+=  bootinfo.c
++SRCS+=  iris_prf.c iris_cons.c iris_zs.c
++SRCS+=  iris_parse.c
++SRCS+=  iris_autoconf.c iris_scsi.c
++SRCS+=  iris_disk.c
++SRCS+=  iris_scsictl.c
++SRCS+=  iris_conf.c
++SRCS+=  iris_devopen.c
++
++PROG=	irisboot
++${PROG}: ip12boot
++.if ${MACHINE_ARCH} == "mipseb"
++	cp ip12boot ip12boot.tmp
++	${ELF2ECOFF} ip12boot.tmp ${.TARGET}
++.else
++	touch ${.TARGET}
++.endif
++
++# XXX Temporary hack to install the ELF version, too.
++FILES+=		ip12boot
++CLEANFILES+=	ip12boot ip12boot.elf
++
++CLEANFILES+=	ip12boot.map
++
++CLEANFILES+=	ip12boot.tmp
++
++.include "../Makefile.booters"
++
++ip12boot: ${OBJS} ${LIBS}
++	${_MKTARGET_LINK}
++.if defined(PRE_ARCS)
++	${LD} -Map ${.TARGET}.map -N -x -Ttext ${LOAD_ADDRESS_IP12} ${LDBUG} \
++	    -m elf32btsmip -e start -o ${.TARGET}.elf ${OBJS} ${LIBS}
++.else
++	${LD} -Map ${.TARGET}.map -N -x -Ttext ${LOAD_ADDRESS} ${LDBUG} \
++	    -m elf32btsmip -e start -o ${.TARGET}.elf ${OBJS} ${LIBS}
++.endif
++	@${STRIP} -s ${.TARGET}.elf -o ${.TARGET}
++	@${SIZE} ${.TARGET}
++
++cleandir distclean: .WAIT cleanlibdir
++cleanlibdir:
++	-rm -rf lib
+\ No newline at end of file
+diff -Naru src.orig/sys/arch/sgimips/stand/bootiris/version src/sys/arch/sgimips/stand/bootiris/version
+--- src.orig/sys/arch/sgimips/stand/bootiris/version	1970-01-01 00:00:00.000000000 +0000
++++ src/sys/arch/sgimips/stand/bootiris/version	2018-08-19 06:47:02.822320997 +0000
+@@ -0,0 +1,5 @@
++NOTE ANY CHANGES YOU MAKE TO THE BOOTBLOCKS HERE.  The format of this
++file is important - make sure the entries are appended on end, last item
++is taken as the current.
++
++1.0:	Initial sgimips "IRIS" series MIPS processors machine booter
+\ No newline at end of file
+diff -Naru src.orig/sys/arch/sgimips/stand/common/iris_autoconf.c src/sys/arch/sgimips/stand/common/iris_autoconf.c
+--- src.orig/sys/arch/sgimips/stand/common/iris_autoconf.c	1970-01-01 00:00:00.000000000 +0000
++++ src/sys/arch/sgimips/stand/common/iris_autoconf.c	2018-08-19 08:11:07.132304993 +0000
+@@ -0,0 +1,38 @@
++/*
++ * Copyright (c) 2018 Naruaki Etomi
++ * All rights reserved.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions
++ * are met:
++ * 1. Redistributions of source code must retain the above copyright
++ *    notice, this list of conditions and the following disclaimer.
++ * 2. Redistributions in binary form must reproduce the above copyright
++ *    notice, this list of conditions and the following disclaimer in the
++ *    documentation and/or other materials provided with the distribution.
++ *
++ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
++ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
++ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
++ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
++ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
++ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
++ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
++ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
++ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++ */
++
++/*
++ * Silicon Graphics "IRIS" series MIPS processors machine bootloader.
++ * Find and init devices.
++ */
++
++#include <mips/cpuregs.h>
++#include "iris_machdep.h"
++
++void
++find_devs(void)
++{
++	wd33c93_init((void *)MIPS_PHYS_TO_KSEG1(SCSIA_ADDR), (void *)MIPS_PHYS_TO_KSEG1(SCSID_ADDR));
++}
+\ No newline at end of file
+diff -Naru src.orig/sys/arch/sgimips/stand/common/iris_boot.c src/sys/arch/sgimips/stand/common/iris_boot.c
+--- src.orig/sys/arch/sgimips/stand/common/iris_boot.c	1970-01-01 00:00:00.000000000 +0000
++++ src/sys/arch/sgimips/stand/common/iris_boot.c	2018-08-19 08:45:01.423660992 +0000
+@@ -0,0 +1,135 @@
++/*
++ * Copyright (c) 2018 Naruaki Etomi
++ * All rights reserved.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions
++ * are met:
++ * 1. Redistributions of source code must retain the above copyright
++ *    notice, this list of conditions and the following disclaimer.
++ * 2. Redistributions in binary form must reproduce the above copyright
++ *    notice, this list of conditions and the following disclaimer in the
++ *    documentation and/or other materials provided with the distribution.
++ *
++ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
++ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
++ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
++ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
++ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
++ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
++ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
++ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
++ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++ */
++
++/*
++ * Silicon Graphics "IRIS" series MIPS processors machine bootloader.
++ *
++ * Notes:
++ *   The amount of physical memory space available to
++ *   the system is 3661820 (0x80002000 - 0x8037fffc) bytes.
++ *   This space is too tight for kernel and bootloader.
++ *   So we keep it simple.
++ */
++
++#include <lib/libsa/stand.h>
++#include <lib/libsa/loadfile.h>
++#include <lib/libkern/libkern.h>
++
++#include <sys/param.h>
++#include <sys/exec.h>
++#include <sys/exec_elf.h>
++#include <sys/boot_flag.h>
++
++#ifndef	INDIGO_R3K_MODE
++#include <dev/arcbios/arcbios.h>
++#endif
++
++#include "iris_machdep.h"
++
++#include "common.h"
++#include "bootinfo.h"
++
++int main(int, char **);
++
++/* Storage must be static. */
++struct btinfo_symtab bi_syms;
++struct btinfo_bootpath bi_bpath;
++
++static uint8_t bootinfo[BOOTINFO_SIZE];
++
++/*
++ * This gets arguments from the PROM monitor.
++ * argv[0] will be path to the bootloader (i.e., "dksc(X,Y,8)/bootiris").
++ *
++ * argv[1] through argv[n] will contain arguments passed from the PROM, if any.
++ */
++
++int
++main(int argc, char **argv)
++{
++	char kernelname[1 + 32];
++	void (*entry) (int, char *[], int, void *);
++	u_long marks[MARK_MAX];
++	int win = 0;
++	int zs_addr, speed;
++	
++	cninit(&zs_addr, &speed);
++ 
++ 	/* print a banner */
++	printf("\n");
++	printf("%s " NETBSD_VERS " Yet another Bootstrap, Revision %s\n",
++	    bootprog_name, bootprog_rev);
++	printf("\n");
++
++	memset(marks, 0, sizeof marks);
++	
++	/* initialise bootinfo structure early */
++	bi_init(bootinfo);
++
++	if (strstr(argv[1], "dksc(")) {
++		parse(argv, kernelname);
++	} else {
++		abort();
++	}
++
++	find_devs();
++
++	win = loadfile(kernelname, marks, LOAD_KERNEL);
++
++	if (win < 0) {
++		printf("Boot failed!  Halting...\n");
++#ifdef INDIGO_R3K_MODE
++		romrestart();
++#else
++		arcbios_Reboot();
++#endif
++	}
++
++	strlcpy(bi_bpath.bootpath, kernelname, BTINFO_BOOTPATH_LEN);
++	bi_add(&bi_bpath, BTINFO_BOOTPATH, sizeof(bi_bpath));
++
++	bi_syms.nsym = marks[MARK_NSYM];
++	bi_syms.ssym = marks[MARK_SYM];
++	bi_syms.esym = marks[MARK_END];
++	bi_add(&bi_syms, BTINFO_SYMTAB, sizeof(bi_syms));
++	entry = (void *)marks[MARK_ENTRY];
++	
++	(*entry)(argc, argv, BOOTINFO_MAGIC, bootinfo);
++
++	printf("Kernel returned!  Halting...\n");
++	return 0;
++}
++
++void
++abort(void)
++{
++	printf("Invalid argument\n");
++	printf("i.e., dksc(0,X,8)loader dksc(0,X,0)/kernel\n");
++#ifdef INDIGO_R3K_MODE
++	romrestart();
++#else
++	arcbios_Reboot();
++#endif
++}
+\ No newline at end of file
+diff -Naru src.orig/sys/arch/sgimips/stand/common/iris_conf.c src/sys/arch/sgimips/stand/common/iris_conf.c
+--- src.orig/sys/arch/sgimips/stand/common/iris_conf.c	1970-01-01 00:00:00.000000000 +0000
++++ src/sys/arch/sgimips/stand/common/iris_conf.c	2018-08-19 06:48:54.242454997 +0000
+@@ -0,0 +1,53 @@
++/*
++ * Copyright (c) 2018 Naruaki Etomi
++ * All rights reserved.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions
++ * are met:
++ * 1. Redistributions of source code must retain the above copyright
++ *    notice, this list of conditions and the following disclaimer.
++ * 2. Redistributions in binary form must reproduce the above copyright
++ *    notice, this list of conditions and the following disclaimer in the
++ *    documentation and/or other materials provided with the distribution.
++ *
++ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
++ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
++ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
++ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
++ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
++ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
++ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
++ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
++ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++ */
++
++/*
++ * Silicon Graphics "IRIS" series MIPS processors machine bootloader.
++ */
++
++#include <sys/param.h>
++#include <sys/types.h>
++#include <lib/libsa/stand.h>
++#include <lib/libsa/ufs.h>
++#include <lib/libsa/lfs.h>
++
++#include "../common/disk.h"
++
++#define diskioctl /*(()(struct open_file*, u_long, void*))*/0
++
++struct devsw devsw[] = {
++	{ "dksc", diskstrategy, diskopen, diskclose, diskioctl },
++};
++
++int	ndevs = __arraycount(devsw);
++
++struct fs_ops file_system[] = {
++	FS_OPS(ffsv1),
++	FS_OPS(ffsv2),
++	FS_OPS(lfsv1),
++	FS_OPS(lfsv2),
++};
++
++int nfsys = __arraycount(file_system);
+\ No newline at end of file
+diff -Naru src.orig/sys/arch/sgimips/stand/common/iris_cons.c src/sys/arch/sgimips/stand/common/iris_cons.c
+--- src.orig/sys/arch/sgimips/stand/common/iris_cons.c	1970-01-01 00:00:00.000000000 +0000
++++ src/sys/arch/sgimips/stand/common/iris_cons.c	2018-08-19 06:48:54.248264997 +0000
+@@ -0,0 +1,135 @@
++/*
++ * Copyright (c) 2018 Naruaki Etomi
++ * All rights reserved.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions
++ * are met:
++ * 1. Redistributions of source code must retain the above copyright
++ *    notice, this list of conditions and the following disclaimer.
++ * 2. Redistributions in binary form must reproduce the above copyright
++ *    notice, this list of conditions and the following disclaimer in the
++ *    documentation and/or other materials provided with the distribution.
++ *
++ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
++ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
++ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
++ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
++ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
++ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
++ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
++ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
++ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++ */
++
++/*
++ * Silicon Graphics "IRIS" series MIPS processors machine bootloader.
++ * Front end of Zilog Z8530 Dual UART driver.
++ */
++
++#include <lib/libsa/stand.h>
++
++#include <machine/cpu.h>
++
++#include "iris_machdep.h"
++#include "iris_cons.h"
++#include "iris_zs.h"
++
++void zscnprobe(struct consdev *);
++void zscninit(struct consdev *);
++void zscnputchar(void *, int);
++int zscngetchar(void *);
++int zscnscan(void *);
++
++#define ZSCHAN 0x0
++#define ZSSPEED 9600
++
++struct consdev constab[] = {
++	{ "zs", ZSCHAN, ZSSPEED,
++		zscnprobe, zscninit, zscngetchar, zscnputchar, zscnscan },
++	{ 0 }
++};
++
++struct consdev *cn_tab;
++
++char *
++cninit(int *addr, int *speed)
++{
++	register struct consdev *cp;
++
++	cn_tab = NULL;
++	for (cp = constab; cp->cn_probe; cp++) {
++		(*cp->cn_probe)(cp);
++		if (cp->cn_pri > CN_DEAD &&
++		   (cn_tab == NULL || cp->cn_pri > cn_tab->cn_pri))
++			cn_tab = cp;
++	}
++	if (cn_tab) {
++		(*cn_tab->cn_init)(cn_tab);
++		*addr = cn_tab->address;
++		*speed = cn_tab->speed;
++		return cn_tab->cn_name;
++	}
++
++	return NULL;
++}
++
++int
++cngetc(void)
++{
++	if (cn_tab)
++		return (*cn_tab->cn_getc)(cn_tab->cn_dev);
++	return 0;
++}
++
++void
++cnputc(int c)
++{
++	if (cn_tab)
++		(*cn_tab->cn_putc)(cn_tab->cn_dev, c);
++}
++
++int
++cnscan(void)
++{
++	if (cn_tab)
++		return (*cn_tab->cn_scan)(cn_tab->cn_dev);
++	return -1;
++}
++
++void
++zscnprobe(struct consdev *cp)
++{
++		cp->cn_pri = CN_REMOTE;
++}
++
++void
++zscninit(struct consdev *cp)
++{
++
++	cp->cn_dev = zs_init(cp->address, cp->speed);
++}
++
++int
++zscngetchar(void *dev)
++{
++
++	return zscngetc(dev);
++}
++
++void
++zscnputchar(void *dev, int c)
++{
++
++	if (c == '\n')
++		zscnputc(dev, '\r');
++	zscnputc(dev, c);
++}
++
++int
++zscnscan(void *dev)
++{
++
++	return zscnscanc(dev);
++}
+\ No newline at end of file
+diff -Naru src.orig/sys/arch/sgimips/stand/common/iris_cons.h src/sys/arch/sgimips/stand/common/iris_cons.h
+--- src.orig/sys/arch/sgimips/stand/common/iris_cons.h	1970-01-01 00:00:00.000000000 +0000
++++ src/sys/arch/sgimips/stand/common/iris_cons.h	2018-08-19 06:48:54.258977997 +0000
+@@ -0,0 +1,52 @@
++/*
++ * Copyright (c) 2018 Naruaki Etomi
++ * All rights reserved.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions
++ * are met:
++ * 1. Redistributions of source code must retain the above copyright
++ *    notice, this list of conditions and the following disclaimer.
++ * 2. Redistributions in binary form must reproduce the above copyright
++ *    notice, this list of conditions and the following disclaimer in the
++ *    documentation and/or other materials provided with the distribution.
++ *
++ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
++ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
++ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
++ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
++ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
++ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
++ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
++ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
++ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++ */
++
++/*
++ * Silicon Graphics "IRIS" series MIPS processors machine bootloader.
++ */
++
++struct consdev {
++	char	*cn_name;	/* console device name */
++	int	address;	/* address */
++	int	speed;		/* speed(serial only) */
++	void	(*cn_probe)	/* probe hardware and fill in consdev info */
++(struct consdev *);
++	void	(*cn_init)	/* turn on as console */
++(struct consdev *);
++	int	(*cn_getc)	/* getchar interface */
++(void *);
++	void	(*cn_putc)	/* putchar interface */
++(void *, int);
++	int	(*cn_scan)	/* scan interface */
++(void *);
++	int	cn_pri;		/* pecking order; the higher the better */
++	void	*cn_dev;	/* device data tag */
++};
++
++/* values for cn_pri - reflect our policy for console selection */
++#define	CN_DEAD		0	/* device doesn't exist */
++#define CN_NORMAL	1	/* device exists but is nothing special */
++#define CN_INTERNAL	2	/* "internal" bit-mapped display */
++#define CN_REMOTE	3	/* serial interface with remote bit set */
+diff -Naru src.orig/sys/arch/sgimips/stand/common/iris_devopen.c src/sys/arch/sgimips/stand/common/iris_devopen.c
+--- src.orig/sys/arch/sgimips/stand/common/iris_devopen.c	1970-01-01 00:00:00.000000000 +0000
++++ src/sys/arch/sgimips/stand/common/iris_devopen.c	2018-08-19 06:48:54.113704997 +0000
+@@ -0,0 +1,57 @@
++/*
++ * Copyright (c) 2018 Naruaki Etomi
++ * All rights reserved.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions
++ * are met:
++ * 1. Redistributions of source code must retain the above copyright
++ *    notice, this list of conditions and the following disclaimer.
++ * 2. Redistributions in binary form must reproduce the above copyright
++ *    notice, this list of conditions and the following disclaimer in the
++ *    documentation and/or other materials provided with the distribution.
++ *
++ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
++ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
++ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
++ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
++ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
++ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
++ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
++ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
++ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++ */
++
++/*
++ * Silicon Graphics "IRIS" series MIPS processors machine bootloader.
++ */
++
++#include <lib/libsa/stand.h>
++#include <lib/libkern/libkern.h>
++#include "iris_machdep.h"
++
++int
++devopen(struct open_file *f, const char *fname, char **file)
++{
++	int error;
++	const char *cp;
++
++	struct devsw *dp;
++
++	cp = fname;
++
++	dp = &devsw[0];
++
++	error = (dp->dv_open)(f, fname);
++
++	if (error)
++		return error;
++
++	f->f_dev = dp;
++
++	if (file && *cp != '\0')
++		*file = (char *)cp;	/* XXX */
++
++	return 0;
++}
+\ No newline at end of file
+diff -Naru src.orig/sys/arch/sgimips/stand/common/iris_disk.c src/sys/arch/sgimips/stand/common/iris_disk.c
+--- src.orig/sys/arch/sgimips/stand/common/iris_disk.c	1970-01-01 00:00:00.000000000 +0000
++++ src/sys/arch/sgimips/stand/common/iris_disk.c	2018-08-19 06:48:54.135576997 +0000
+@@ -0,0 +1,198 @@
++/*
++ * Copyright (c) 2018 Naruaki Etomi
++ * All rights reserved.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions
++ * are met:
++ * 1. Redistributions of source code must retain the above copyright
++ *    notice, this list of conditions and the following disclaimer.
++ * 2. Redistributions in binary form must reproduce the above copyright
++ *    notice, this list of conditions and the following disclaimer in the
++ *    documentation and/or other materials provided with the distribution.
++ *
++ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
++ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
++ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
++ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
++ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
++ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
++ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
++ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
++ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++ */
++
++/*
++ * Silicon Graphics "IRIS" series MIPS processors machine bootloader.
++ * Disk I/O API routine.
++ * Most of the following was adapted from /sys/arch/hp300/stand/common/sd.c.
++ */
++
++#include <lib/libsa/stand.h>
++
++#include <sys/param.h>
++#include <sys/disklabel.h>
++
++#ifndef	INDIGO_R3K_MODE
++#include <dev/arcbios/arcbios.h>
++#endif
++
++#include "disk.h"
++
++#include "iris_machdep.h"
++#include "iris_scsivar.h"
++
++struct	disk_softc {
++	int		sc_part;			/* disk partition number */
++	char	sc_retry;
++	char	sc_alive;
++	short	sc_blkshift;
++	struct	disklabel sc_label;	/* disk label for this disk */
++
++};
++
++static int diskinit(struct disk_softc *);
++
++#define	DISKRETRY  2
++
++int
++diskstrategy(void *devdata, int rw, daddr_t bn, size_t reqcnt, void *addr, size_t *cnt)
++{
++	struct disk_softc *sc;
++	struct disklabel *lp;
++	uint8_t *buf;
++	daddr_t blk;
++	u_int nblk;
++	int stat;
++
++	sc = devdata;
++
++	buf = addr;
++	lp = &sc->sc_label;
++	blk = bn + (lp->d_partitions[sc->sc_part].p_offset >> sc->sc_blkshift);
++	nblk = reqcnt >> sc->sc_blkshift;
++
++	sc->sc_retry = 0;
++	
++retry:
++	stat = scsi_readx28(buf, reqcnt, blk, nblk);
++
++	if (stat) {
++		DELAY(1000000);
++		if (++sc->sc_retry > DISKRETRY) {
++			return EIO;
++		}
++		printf("diskstrategy retry\n");
++		goto retry;
++	}
++
++	*cnt = reqcnt;
++
++	return 0;
++}
++
++static int
++diskinit(struct disk_softc *sc)
++{
++	u_char capbuf[2];
++
++	u_char stat;
++
++	stat = scsi_test_unit_rdy();
++
++	if (stat) {
++		/* drive may be doing RTZ - wait a bit */
++		if (stat == STS_CHECKCOND) {
++			DELAY(1000000);
++			stat = scsi_test_unit_rdy();
++		}
++
++		if (stat) {
++			printf("diskinit abort!\n");
++			printf("Boot failed!  Halting...\n");
++#ifdef INDIGO_R3K_MODE
++			romrestart();
++#else
++			arcbios_Reboot();
++#endif
++		}
++	}
++
++	/*
++	 * try to get the drive block size.
++	 */
++	capbuf[0] = 0;
++	capbuf[1] = 0;
++
++	stat = scsi_readx25((u_char *)capbuf, sizeof(capbuf));
++
++	if (stat == 0) {
++		if (capbuf[1] > DEV_BSIZE)
++			for (; capbuf[1] > DEV_BSIZE; capbuf[1] >>= 1)
++				++sc->sc_blkshift;
++	}
++
++	sc->sc_alive = 1;
++	return 1;
++}
++
++int
++diskopen(struct open_file *f, ...)
++{
++	struct disk_softc *sc;
++	struct disklabel *lp;
++	size_t cnt;
++	char *msg, buf[DEV_BSIZE];
++	int error;
++
++	cnt = 0;
++
++	sc = alloc(sizeof(struct disk_softc));
++	memset(sc, 0, sizeof(struct disk_softc));
++	f->f_devdata = (void *)sc;
++
++	sc->sc_part = scsi_part;
++
++	if (sc->sc_alive == 0) {
++		if (diskinit(sc) == 0)
++			return ENXIO;
++	}
++
++	/* try to read disk label and partition table information */
++	lp = &sc->sc_label;
++	lp->d_secsize = DEV_BSIZE;
++	lp->d_secpercyl = 1;
++	lp->d_npartitions = MAXPARTITIONS;
++	lp->d_partitions[scsi_part].p_offset = 0;
++	lp->d_partitions[scsi_part].p_size = 0x7fffffff;
++
++	error = diskstrategy(sc, F_READ, (daddr_t)LABELSECTOR, DEV_BSIZE, buf, &cnt);
++
++	if (error || cnt != DEV_BSIZE) {
++		printf("diskstrategy error...\n");
++		dealloc(sc, sizeof(struct disk_softc));
++		return ENXIO;
++	}
++
++	msg = getdisklabel(buf, lp);
++
++	if (msg) {
++		/* If no label, just assume 0 and return */
++		printf("No disklabel...\n");
++		return 0;
++	}
++
++	return 0;
++}
++
++int
++diskclose(struct open_file *f)
++{
++	struct disk_softc *sc = f->f_devdata;
++
++	dealloc(sc, sizeof *sc);
++	f->f_devdata = NULL;
++
++	return 0;
++}
+\ No newline at end of file
+diff -Naru src.orig/sys/arch/sgimips/stand/common/iris_machdep.h src/sys/arch/sgimips/stand/common/iris_machdep.h
+--- src.orig/sys/arch/sgimips/stand/common/iris_machdep.h	1970-01-01 00:00:00.000000000 +0000
++++ src/sys/arch/sgimips/stand/common/iris_machdep.h	2018-08-19 08:46:49.647032992 +0000
+@@ -0,0 +1,107 @@
++/*
++ * Copyright (c) 2018 Naruaki Etomi
++ * All rights reserved.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions
++ * are met:
++ * 1. Redistributions of source code must retain the above copyright
++ *    notice, this list of conditions and the following disclaimer.
++ * 2. Redistributions in binary form must reproduce the above copyright
++ *    notice, this list of conditions and the following disclaimer in the
++ *    documentation and/or other materials provided with the distribution.
++ *
++ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
++ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
++ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
++ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
++ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
++ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
++ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
++ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
++ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++ */
++
++/*
++ * Silicon Graphics "IRIS" series MIPS processors machine bootloader.
++ */
++
++#include <sys/param.h>
++#include <lib/libsa/stand.h>
++#include "iris_scsivar.h"
++
++/* iris_boot.c */
++void abort(void);
++
++/* iris_parse.c */
++void parse(char **, char *);
++
++/* iris_autoconf.c */
++void find_devs(void);
++
++/* iris_start.S */
++void romrestart(void);
++
++ /* iris_cons.c */
++char *cninit(int *, int *);
++int   cngetc(void);
++void  cnputc(int);
++int   cnscan(void);
++
++/* iris_scsi.c */
++void wd33c93_init(void *, void*);
++int wd33c93_go(struct wd33c93_softc *, uint8_t *, size_t, uint8_t *, size_t *);
++
++/* iris_scsictl.c */
++int scsi_test_unit_rdy(void);
++int scsi_readx25(u_char *, size_t);
++int scsi_readx28(u_char *, size_t, daddr_t, size_t);
++int scsi_writex2A(u_char *, size_t, daddr_t, size_t);
++
++#define INDIGO_R3K_MODE
++
++#ifdef INDIGO_R3K_MODE
++#define ZS_ADDR 0x1fb80d10
++#define SCSIA_ADDR 0x1FB80122
++#define SCSID_ADDR 0x1FB80126
++
++/* Target is Personal IRIS R3000 36Mhz. */
++#define DELAY(n)							\
++do {							\
++        register int __N = 18 * n;							\
++        do {							\
++                __asm("addiu %0,%1,-1" : "=r" (__N) : "0" (__N));							\
++        } while (__N > 0);							\
++} while (/* CONSTCOND */ 0)
++#endif
++
++#ifdef INDIGO_R4K_MODE
++#define ZS_ADDR 0x1fb80d10
++#define SCSIA_ADDR 0x1FB80122
++#define SCSID_ADDR 0x1FB80126
++
++/* Target is IRIS Indigo R4000 100Mhz. */
++#define DELAY(n)							\
++do {							\
++        register int __N = 50 * n;							\
++        do {							\
++                __asm("addiu %0,%1,-1" : "=r" (__N) : "0" (__N));							\
++        } while (__N > 0);							\
++} while (/* CONSTCOND */ 0)
++#endif
++
++#ifdef INDY_MODE
++#define ZS_ADDR 0x1fbd9830
++#define SCSIA_ADDR 0x1FBC0003
++#define SCSID_ADDR 0x1FBC0007
++
++/* Target is Indy 180Mhz. */
++#define DELAY(n)							\
++do {							\
++        register int __N = 90 * n;							\
++        do {							\
++                __asm("addiu %0,%1,-1" : "=r" (__N) : "0" (__N));							\
++        } while (__N > 0);							\
++} while (/* CONSTCOND */ 0)
++#endif
+diff -Naru src.orig/sys/arch/sgimips/stand/common/iris_parse.c src/sys/arch/sgimips/stand/common/iris_parse.c
+--- src.orig/sys/arch/sgimips/stand/common/iris_parse.c	1970-01-01 00:00:00.000000000 +0000
++++ src/sys/arch/sgimips/stand/common/iris_parse.c	2018-08-19 06:48:54.173883997 +0000
+@@ -0,0 +1,80 @@
++/*
++ * Copyright (c) 2018 Naruaki Etomi
++ * All rights reserved.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions
++ * are met:
++ * 1. Redistributions of source code must retain the above copyright
++ *    notice, this list of conditions and the following disclaimer.
++ * 2. Redistributions in binary form must reproduce the above copyright
++ *    notice, this list of conditions and the following disclaimer in the
++ *    documentation and/or other materials provided with the distribution.
++ *
++ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
++ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
++ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
++ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
++ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
++ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
++ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
++ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
++ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++ */
++
++/*
++ * Silicon Graphics "IRIS" series MIPS processors machine bootloader.
++ * Parse argv argument vector.
++ */
++
++#include <lib/libsa/stand.h>
++#include <lib/libkern/libkern.h>
++
++#include "iris_machdep.h"
++#include "iris_scsivar.h"
++
++uint8_t scsi_ctlr = 255, scsi_id = 255, scsi_part = 255;
++
++void
++parse(char *argv[], char *kernelname)
++{
++	char disksetting[1 + 32];
++	char bootpath[1 + 64];
++	int i;
++
++	char *ep = strcpy(bootpath, argv[1]);
++	ep = strrchr(bootpath, '/');
++	if (ep == NULL)
++		abort();
++
++	strcpy(kernelname, ep + 1);
++
++	i =  ep - bootpath;
++	bootpath[i - 1] = '\0';
++
++	ep = strchr(bootpath, '(');
++	if (ep == NULL)
++		/* horrible! */
++		abort();
++
++	/* ctlr,id,part */
++	strcpy(disksetting, ep + 1);
++
++	i = 0;
++
++	while (disksetting[i] != '\0') {
++		if (disksetting[i] >='0' && disksetting[i] <='9') {
++			if (i == 0)
++				scsi_ctlr = atoi(&disksetting[i]);
++			if (i == 2)
++				scsi_id = atoi(&disksetting[i]);
++			if (i == 4)
++				scsi_part = atoi(&disksetting[i]);
++		}
++		i++;
++	}
++
++	if ((scsi_ctlr == 255) || (scsi_id == 255) || (scsi_part == 255))
++		abort();		
++}
+\ No newline at end of file
+diff -Naru src.orig/sys/arch/sgimips/stand/common/iris_prf.c src/sys/arch/sgimips/stand/common/iris_prf.c
+--- src.orig/sys/arch/sgimips/stand/common/iris_prf.c	1970-01-01 00:00:00.000000000 +0000
++++ src/sys/arch/sgimips/stand/common/iris_prf.c	2018-08-19 06:48:54.197927997 +0000
+@@ -0,0 +1,43 @@
++/*
++ * Copyright (c) 2018 Naruaki Etomi
++ * All rights reserved.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions
++ * are met:
++ * 1. Redistributions of source code must retain the above copyright
++ *    notice, this list of conditions and the following disclaimer.
++ * 2. Redistributions in binary form must reproduce the above copyright
++ *    notice, this list of conditions and the following disclaimer in the
++ *    documentation and/or other materials provided with the distribution.
++ *
++ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
++ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
++ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
++ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
++ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
++ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
++ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
++ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
++ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++ */
++
++/*
++ * Silicon Graphics "IRIS" series MIPS processors machine bootloader.
++ */
++
++#include <lib/libsa/stand.h>
++#include "iris_machdep.h"
++
++void
++putchar(int c)
++{
++	cnputc(c);
++}
++
++int
++getchar(void)
++{
++	return cngetc();
++}
+\ No newline at end of file
+diff -Naru src.orig/sys/arch/sgimips/stand/common/iris_scsi.c src/sys/arch/sgimips/stand/common/iris_scsi.c
+--- src.orig/sys/arch/sgimips/stand/common/iris_scsi.c	1970-01-01 00:00:00.000000000 +0000
++++ src/sys/arch/sgimips/stand/common/iris_scsi.c	2018-08-19 06:48:54.231409997 +0000
+@@ -0,0 +1,831 @@
++/*
++ * Copyright (c) 2018 Naruaki Etomi
++ * All rights reserved.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions
++ * are met:
++ * 1. Redistributions of source code must retain the above copyright
++ *    notice, this list of conditions and the following disclaimer.
++ * 2. Redistributions in binary form must reproduce the above copyright
++ *    notice, this list of conditions and the following disclaimer in the
++ *    documentation and/or other materials provided with the distribution.
++ *
++ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
++ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
++ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
++ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
++ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
++ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
++ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
++ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
++ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++ */
++
++/*
++ * Silicon Graphics "IRIS" series MIPS processors machine bootloader.
++ * WD33C93 SCSI bus driver for standalone programs.
++ */
++
++#include <sys/cdefs.h>
++#include <lib/libsa/stand.h>
++
++#ifndef	INDIGO_R3K_MODE
++#include <dev/arcbios/arcbios.h>
++#endif
++
++#include "iris_machdep.h"
++#include "iris_scsivar.h"
++#include "iris_scsireg.h"
++#include "iris_scsimsg.h"
++#include "iris_scsicmd.h"
++
++#define SBIC_WAIT(regs, until, timeo) wd33c93_wait(regs, until, timeo)
++
++/*
++ * Timeouts
++ */
++int	wd33c93_cmd_wait	= SBIC_CMD_WAIT;
++int	wd33c93_data_wait	= SBIC_DATA_WAIT;
++int	wd33c93_init_wait	= SBIC_INIT_WAIT;
++
++#define STATUS_UNKNOWN	0xff
++
++void wd33c93_reset(struct wd33c93_softc *);
++int	wd33c93_wait(struct wd33c93_softc *, u_char, int);
++u_char wd33c93_selectbus(struct wd33c93_softc *, uint8_t *, size_t, uint8_t *, size_t *);
++void wd33c93_setsync(struct wd33c93_softc *);
++int	wd33c93_nextstate(struct wd33c93_softc *, uint8_t *, size_t, uint8_t *, size_t *, u_char, u_char);
++size_t	wd33c93_xfout(struct wd33c93_softc *, void *, size_t *);
++int	wd33c93_intr(struct wd33c93_softc *, uint8_t *, size_t, uint8_t *, size_t *);
++size_t	wd33c93_xfin(struct wd33c93_softc *, void *, size_t *);
++void wd33c93_xferdone(struct wd33c93_softc *);
++int	wd33c93_abort(struct wd33c93_softc *, uint8_t *, size_t, uint8_t *, size_t *);
++int	wd33c93_poll(struct wd33c93_softc *, uint8_t *, size_t, uint8_t *, size_t *);
++void wd33c93_timeout(struct wd33c93_softc *, uint8_t *, size_t, uint8_t *, size_t *);
++int	wd33c93_msgin_phase(struct wd33c93_softc *);
++void wd33c93_scsistart(struct wd33c93_softc *);
++void wd33c93_scsidone(struct wd33c93_softc *);
++void wd33c93_error(struct wd33c93_softc *);
++
++/*
++ * Initialize SPC & Data Structure
++ */
++void
++wd33c93_init(void *aaddr, void *daddr)
++{
++	struct wd33c93_softc *sc;
++
++	sc = &wd33c93_softc[scsi_ctlr];
++
++	sc->sc_asr_regh = aaddr;
++	sc->sc_data_regh = daddr;
++	sc->sc_target = scsi_id;
++
++	sc->sc_flags = 0;
++	sc->sc_state = SBIC_IDLE;
++
++	wd33c93_reset(sc);
++}
++
++void
++wd33c93_reset(struct wd33c93_softc *sc)
++{
++	u_int my_id;
++	u_char csr;
++
++	SET_SBIC_cmd(sc, SBIC_CMD_ABORT);
++	WAIT_CIP(sc);
++
++	my_id = sc->sc_target & SBIC_ID_MASK;
++
++	/* Set Clock == 20.0 MHz */
++	my_id |= SBIC_ID_FS_8_10;
++	sc->sc_syncperiods = 2 * 2 * 1250 / SCSI_CLKFREQ;
++
++	SET_SBIC_myid(sc, my_id);
++
++	/* Reset the chip */
++	SET_SBIC_cmd(sc, SBIC_CMD_RESET);
++	DELAY(25);
++	SBIC_WAIT(sc, SBIC_ASR_INT, 0);
++
++	/* PIO  mode */
++    SBIC_TC_PUT(sc, 0);
++	SET_SBIC_control(sc, SBIC_CTL_EDI | SBIC_CTL_IDI);
++
++	/* clears interrupt also */
++	GET_SBIC_csr(sc, csr);
++	__USE(csr);
++
++	SET_SBIC_rselid(sc, SBIC_RID_ER);
++	SET_SBIC_syn(sc, 0);
++
++	sc->sc_flags = 0;
++	sc->sc_state = SBIC_IDLE;
++}
++
++int
++wd33c93_wait(struct wd33c93_softc *sc, u_char until, int timeo)
++{
++	u_char  val;
++
++	if (timeo == 0)
++		/* some large value.. */
++		timeo = 1000000;
++
++	GET_SBIC_asr(sc, val);
++
++	while ((val & until) == 0) {
++		if (timeo-- == 0) {
++			return(val);
++			break;
++		}
++		DELAY(1);
++		GET_SBIC_asr(sc, val);
++	}
++	return (val);
++}
++
++/* SCSI command entry point */
++int
++wd33c93_go(struct wd33c93_softc *sc, uint8_t *cbuf, size_t clen, uint8_t *buf, size_t *lenp)
++{
++	int	i;
++	u_char	csr, asr;
++
++	wd33c93_scsistart(sc);
++
++	sc->sc_status = STATUS_UNKNOWN;
++	sc->sc_flags = 0;
++	/* select the SCSI bus (it's an error if bus isn't free) */
++	if ((csr = wd33c93_selectbus(sc, cbuf, clen, buf, lenp)) == 0)
++		/* Not done: needs to be rescheduled */
++		return(1);
++
++	/*
++	 * Lets cycle a while then let the interrupt handler take over.
++	 */
++	GET_SBIC_asr(sc, asr);
++	do {
++		/* Handle the new phase */
++		i = wd33c93_nextstate(sc, cbuf, clen, buf, lenp, csr, asr);
++		WAIT_CIP(sc);		/* XXX */
++		if (sc->sc_state == SBIC_CONNECTED) {
++			GET_SBIC_asr(sc, asr);
++
++			if (asr & SBIC_ASR_LCI)
++				DELAY(5000);
++
++			if (asr & SBIC_ASR_INT)
++				GET_SBIC_csr(sc, csr);
++		}
++
++	} while (sc->sc_state == SBIC_CONNECTED &&
++			 asr & (SBIC_ASR_INT|SBIC_ASR_LCI));
++
++	if (i == SBIC_STATE_DONE) {
++		if (sc->sc_status == STATUS_UNKNOWN) {
++			printf("wd33c93_go: stat == UNKNOWN\n");
++			return(1);
++		}
++	}
++
++	if (wd33c93_poll(sc, cbuf, clen, buf, lenp)) {
++		wd33c93_timeout(sc, cbuf, clen, buf, lenp);
++		if (wd33c93_poll(sc, cbuf, clen, buf, lenp)) {
++			wd33c93_timeout(sc, cbuf, clen, buf, lenp);
++		}
++	}
++	return 0;
++}
++
++/*
++ * select the bus, return when selected or error.
++ *
++ * Returns the current CSR following selection and optionally MSG out phase.
++ * i.e. the returned CSR *should* indicate CMD phase...
++ * If the return value is 0, some error happened.
++ */
++u_char
++wd33c93_selectbus(struct wd33c93_softc *sc, uint8_t *cbuf, size_t clen, uint8_t *buf, size_t *lenp)
++{
++	u_char asr, csr, id, lun, target;
++
++	sc->sc_state = SBIC_SELECTING;
++
++	target = sc->sc_target;
++	lun = SCSI_LUN;
++	static int i = 0;
++
++	/*
++	 * issue select
++	 */
++	SBIC_TC_PUT(sc, 0);
++	SET_SBIC_selid(sc, target);
++	SET_SBIC_timeo(sc, SBIC_TIMEOUT(250, SCSI_CLKFREQ));
++
++	GET_SBIC_asr(sc, asr);
++
++	if (asr & (SBIC_ASR_INT|SBIC_ASR_BSY)) {
++		return 0;
++	}
++
++	SET_SBIC_cmd(sc, SBIC_CMD_SEL_ATN);
++	WAIT_CIP(sc);
++
++	/*
++	 * wait for select (merged from separate function may need
++	 * cleanup)
++	 */
++	do {
++		asr = SBIC_WAIT(sc, SBIC_ASR_INT | SBIC_ASR_LCI, 0);
++
++		if (asr & SBIC_ASR_LCI) {
++			return 0;
++		}
++
++		/* Clear interrupt */
++		GET_SBIC_csr(sc, csr);
++
++		/* Reselected from under our feet? */
++		if (csr == SBIC_CSR_RSLT_NI || csr == SBIC_CSR_RSLT_IFY) {
++			/*
++			 * We need to handle this now so we don't lock up later
++			 */
++			wd33c93_nextstate(sc, cbuf, clen, buf, lenp, csr, asr);
++				return 0;
++			}
++			/* Whoops! */
++			if (csr == SBIC_CSR_SLT || csr == SBIC_CSR_SLT_ATN) {
++				return 0;
++			}
++	} while (csr != (SBIC_CSR_MIS_2 | MESG_OUT_PHASE) &&
++			 csr != (SBIC_CSR_MIS_2 | CMD_PHASE) &&
++			 csr != SBIC_CSR_SEL_TIMEO);
++
++     /* Anyone at home? */
++	if (csr == SBIC_CSR_SEL_TIMEO) {
++		return 0;
++	}
++
++	/* Assume we're now selected */
++	GET_SBIC_selid(sc, id);
++
++	if (id != target) {
++		/* Something went wrong - wrong target was select */
++		printf("wd33c93_selectbus: wrong target selected WANTED %d GOT %d \n", target, id);
++		printf("Boot failed!  Halting...\n");
++#ifdef INDIGO_R3K_MODE
++		romrestart();
++#else
++		arcbios_Reboot();
++#endif
++	}
++
++	sc->sc_flags |= SBICF_SELECTED;
++	sc->sc_state  = SBIC_CONNECTED;
++
++	/* setup correct sync mode for this target */
++	wd33c93_setsync(sc);
++	SET_SBIC_rselid (sc, SBIC_RID_ER);
++
++	/*
++	 * We only really need to do anything when the target goes to MSG out
++	 * If the device ignored ATN, it's probably old and brain-dead,
++	 * but we'll try to support it anyhow.
++	 * If it doesn't support message out, it definately doesn't
++	 * support synchronous transfers, so no point in even asking...
++	 */
++
++	if (csr == (SBIC_CSR_MIS_2 | MESG_OUT_PHASE)) {
++		if ( i < 6) {
++			SEND_BYTE(sc, MSG_IDENTIFY(lun, 0));
++			DELAY(200000);
++			i++;
++		} else {
++
++			/*
++		 	 * setup scsi message sync message request
++		 	 */
++			sc->sc_omsg[0] = MSG_IDENTIFY(lun, 0);
++			sc->sc_omsg[1] = MSG_EXTENDED;
++			sc->sc_omsg[2] = MSG_EXT_SDTR_LEN;
++			sc->sc_omsg[3] = MSG_EXT_SDTR;
++			sc->sc_omsg[4] = sc->sc_syncperiods;
++			sc->sc_omsg[5] = SBIC_SYN_93AB_MAX_OFFSET;
++
++			size_t foo = 6;
++			size_t *bar;
++			bar = &foo;
++
++			wd33c93_xfout(sc, sc->sc_omsg, bar);
++			sc->sc_flags  |= SBICF_SYNCNEGO;
++		}
++
++		SBIC_WAIT(sc, SBIC_ASR_INT , 0);
++		GET_SBIC_csr(sc, csr);
++	}
++	return csr;
++}
++
++/*
++ * Setup sync mode for given target
++ */
++void
++wd33c93_setsync(struct wd33c93_softc *sc)
++{
++	u_char syncreg;
++
++	syncreg = SBIC_SYN(0, 0, 0);
++
++	SET_SBIC_syn(sc, syncreg);
++}
++
++/*
++ * wd33c93_nextstate()
++ * return:
++ *	SBIC_STATE_DONE		== done
++ *	SBIC_STATE_RUNNING	== working
++ *	SBIC_STATE_DISCONNECT	== disconnected
++ *	SBIC_STATE_ERROR	== error
++ */
++int
++wd33c93_nextstate(struct wd33c93_softc *sc, uint8_t *cbuf, size_t clen, uint8_t *buf, size_t *lenp, u_char csr, u_char asr)
++{
++	switch (csr) {
++
++	case SBIC_CSR_XFERRED | CMD_PHASE:
++	case SBIC_CSR_MIS     | CMD_PHASE:
++	case SBIC_CSR_MIS_1   | CMD_PHASE:
++	case SBIC_CSR_MIS_2   | CMD_PHASE:
++
++		;
++		size_t *clenp;
++		clenp = &clen;
++
++		if (wd33c93_xfout(sc, cbuf, clenp))
++			goto abort;
++		break;
++
++	case SBIC_CSR_XFERRED | STATUS_PHASE:
++	case SBIC_CSR_MIS     | STATUS_PHASE:
++	case SBIC_CSR_MIS_1   | STATUS_PHASE:
++	case SBIC_CSR_MIS_2   | STATUS_PHASE:
++		SET_SBIC_control(sc, SBIC_CTL_EDI | SBIC_CTL_IDI);
++
++		/*
++		 * this should be the normal i/o completion case.
++		 * get the status & cmd complete msg then let the
++		 * device driver look at what happened.
++		 */
++		wd33c93_xferdone(sc);
++		wd33c93_scsidone(sc);
++
++		return SBIC_STATE_DONE;
++
++	case SBIC_CSR_XFERRED | DATA_IN_PHASE:
++	case SBIC_CSR_MIS     | DATA_IN_PHASE:
++	case SBIC_CSR_MIS_1   | DATA_IN_PHASE:
++	case SBIC_CSR_MIS_2   | DATA_IN_PHASE:
++	case SBIC_CSR_XFERRED | DATA_OUT_PHASE:
++	case SBIC_CSR_MIS     | DATA_OUT_PHASE:
++	case SBIC_CSR_MIS_1   | DATA_OUT_PHASE:
++	case SBIC_CSR_MIS_2   | DATA_OUT_PHASE:
++		;
++		size_t resid;
++		/*
++		 * Should we transfer using PIO or DMA ?
++		 */
++		/* Perfrom transfer using PIO */
++		if (SBIC_PHASE(csr) == DATA_IN_PHASE){
++			/* data in */
++			resid = wd33c93_xfin(sc, buf, lenp);
++			*lenp = resid;
++			wd33c93_intr(sc, cbuf, clen, buf, lenp);
++		} else {	/* data out */
++			resid = wd33c93_xfout(sc, buf, lenp);
++			*lenp = resid;
++		}
++		break;
++
++	case SBIC_CSR_XFERRED | MESG_IN_PHASE:
++	case SBIC_CSR_MIS     | MESG_IN_PHASE:
++	case SBIC_CSR_MIS_1   | MESG_IN_PHASE:
++	case SBIC_CSR_MIS_2   | MESG_IN_PHASE:
++		/* Handle a single message in... */
++		return wd33c93_msgin_phase(sc);
++
++	case SBIC_CSR_MSGIN_W_ACK:
++		/*
++		 * We should never see this since it's handled in
++		 * 'wd33c93_msgin_phase()' but just for the sake of paranoia...
++		 */
++		SET_SBIC_cmd(sc, SBIC_CMD_CLR_ACK);
++		break;
++
++	case SBIC_CSR_XFERRED | MESG_OUT_PHASE:
++	case SBIC_CSR_MIS     | MESG_OUT_PHASE:
++	case SBIC_CSR_MIS_1   | MESG_OUT_PHASE:
++	case SBIC_CSR_MIS_2   | MESG_OUT_PHASE:
++		/*
++		 * Message out phase.  ATN signal has been asserted
++		 */
++		return SBIC_STATE_RUNNING;
++
++	case SBIC_CSR_DISC:
++	case SBIC_CSR_DISC_1:
++		sc->sc_state = SBIC_IDLE;
++		sc->sc_flags = 0;
++
++		return SBIC_STATE_DISCONNECT;
++
++	case SBIC_CSR_RSLT_NI:
++	case SBIC_CSR_RSLT_IFY:
++	{
++		sc->sc_state = SBIC_RESELECTED;
++
++		if (csr == SBIC_CSR_RSLT_IFY)
++			SET_SBIC_cmd(sc, SBIC_CMD_CLR_ACK);
++		break;
++	}
++
++	default:
++	abort:
++		/* Something unexpected happend -- deal with it. */
++		printf("wd33c93_nextstate:abort\n");
++		printf("Boot failed!  Halting...\n");
++#ifdef INDIGO_R3K_MODE
++		romrestart();
++#else
++		arcbios_Reboot();
++#endif
++	}
++	return SBIC_STATE_RUNNING;
++}
++
++/*
++ * Information Transfer *to* a SCSI Target.
++ *
++ * Note: Don't expect there to be an interrupt immediately after all
++ * the data is transferred out. The WD spec sheet says that the Transfer-
++ * Info command for non-MSG_IN phases only completes when the target
++ * next asserts 'REQ'. That is, when the SCSI bus changes to a new state.
++ *
++ * This can have a nasty effect on commands which take a relatively long
++ * time to complete, for example a START/STOP unit command may remain in
++ * CMD phase until the disk has spun up. Only then will the target change
++ * to STATUS phase. This is really only a problem for immediate commands
++ * since we don't allow disconnection for them (yet).
++ */
++size_t
++wd33c93_xfout(struct wd33c93_softc *sc, void *bp, size_t *lenp)
++{
++
++	int wait = wd33c93_data_wait;
++	u_char asr, *buf = bp;
++	size_t len = *lenp;
++
++	/*
++	 * sigh.. WD-PROTO strikes again.. sending the command in one go
++	 * causes the chip to lock up if talking to certain (misbehaving?)
++	 * targets. Anyway, this procedure should work for all targets, but
++	 * it's slightly slower due to the overhead
++	 */
++
++	SET_SBIC_control(sc, SBIC_CTL_EDI | SBIC_CTL_IDI);
++	SBIC_TC_PUT (sc, (unsigned)len);
++
++	WAIT_CIP (sc);
++	SET_SBIC_cmd (sc, SBIC_CMD_XFER_INFO);
++
++	/*
++	 * Loop for each byte transferred
++	 */
++	do {
++		GET_SBIC_asr(sc, asr);
++
++		if (asr & SBIC_ASR_DBR) {
++			if (len) {
++				SET_SBIC_data (sc, *buf);
++				buf++;
++				len--;
++			} else {
++				SET_SBIC_data (sc, 0);
++			}
++			wait = wd33c93_data_wait;
++		}
++	} while (len && (asr & SBIC_ASR_INT) == 0 && wait-- > 0);
++
++	/*
++	 * Normally, an interrupt will be pending when this routing returns.
++	 */
++	return(len);
++}
++
++int
++wd33c93_intr(struct wd33c93_softc *sc, uint8_t *cbuf, size_t clen, uint8_t *buf, size_t *lenp)
++{
++	u_char	asr, csr;
++
++	/*
++	 * pending interrupt?
++	 */
++	GET_SBIC_asr (sc, asr);
++	if ((asr & SBIC_ASR_INT) == 0)
++		return(0);
++
++	GET_SBIC_csr(sc, csr);
++
++	do {
++
++		(void)wd33c93_nextstate(sc, cbuf, clen, buf, lenp, csr, asr);
++		WAIT_CIP(sc);
++		if (sc->sc_state == SBIC_CONNECTED) {
++			GET_SBIC_asr(sc, asr);
++
++			if (asr & SBIC_ASR_INT)
++				GET_SBIC_csr(sc, csr);
++		}
++	} while (sc->sc_state == SBIC_CONNECTED &&
++	    	 asr & (SBIC_ASR_INT|SBIC_ASR_LCI));
++
++	return(1);
++}
++
++/*
++ * Information Transfer *from* a Scsi Target
++ * returns # bytes left to read
++ */
++size_t
++wd33c93_xfin(struct wd33c93_softc *sc, void *bp, size_t *lenp)
++{
++	size_t len = *lenp;
++
++	int 	wait = wd33c93_data_wait;
++	u_char  *buf = bp;
++	u_char  asr;
++
++	SET_SBIC_control(sc, SBIC_CTL_EDI | SBIC_CTL_IDI);
++	SBIC_TC_PUT (sc, (unsigned)len);
++
++	WAIT_CIP (sc);
++	SET_SBIC_cmd (sc, SBIC_CMD_XFER_INFO);
++
++	/*
++	 * Loop for each byte transferred
++	 */
++	do {
++		GET_SBIC_asr (sc, asr);
++
++		if (asr & SBIC_ASR_DBR) {
++			if (len) {
++				GET_SBIC_data (sc, *buf);
++				buf++;
++				len--;
++			} else {
++				u_char foo;
++				GET_SBIC_data (sc, foo);
++				__USE(foo);
++			}
++			wait = wd33c93_data_wait;
++		}
++
++	} while ((asr & SBIC_ASR_INT) == 0 && wait-- > 0);
++
++	SBIC_TC_PUT (sc, 0);
++
++	/*
++	 * this leaves with one csr to be read
++	 */
++	return len;
++}
++
++/*
++ * Finish SCSI xfer command:  After the completion interrupt from
++ * a read/write operation, sequence through the final phases in
++ * programmed i/o.
++ */
++void
++wd33c93_xferdone(struct wd33c93_softc *sc)
++{
++	u_char	phase, csr;
++
++	/*
++	 * have the wd33c93 complete on its own
++	 */
++	SBIC_TC_PUT(sc, 0);
++	SET_SBIC_cmd_phase(sc, 0x46);
++	SET_SBIC_cmd(sc, SBIC_CMD_SEL_ATN_XFER);
++
++	do {
++		SBIC_WAIT (sc, SBIC_ASR_INT, 0);
++		GET_SBIC_csr (sc, csr);
++	} while ((csr != SBIC_CSR_DISC) &&
++		 (csr != SBIC_CSR_DISC_1) &&
++		 (csr != SBIC_CSR_S_XFERRED));
++
++	sc->sc_flags &= ~SBICF_SELECTED;
++	sc->sc_state = SBIC_DISCONNECT;
++
++	GET_SBIC_cmd_phase(sc, phase);
++
++	if (phase == 0x60)
++		GET_SBIC_tlun(sc, sc->sc_status);
++	else
++		wd33c93_error(sc);
++}
++
++int
++wd33c93_abort(struct wd33c93_softc *sc, uint8_t *cbuf, size_t clen, uint8_t *buf, size_t *lenp)
++{
++	u_char csr, asr;
++
++	GET_SBIC_asr(sc, asr);
++	GET_SBIC_csr(sc, csr);
++
++	/*
++	 * Clean up chip itself
++	 */
++	wd33c93_timeout(sc, cbuf, clen, buf, lenp);
++
++	while (asr & SBIC_ASR_DBR) {
++		/*
++		 * wd33c93 is jammed w/data. need to clear it
++		 * But we don't know what direction it needs to go
++		 */
++		GET_SBIC_data(sc, asr);
++		GET_SBIC_asr(sc, asr);
++		if (asr & SBIC_ASR_DBR)
++			 /* Not the read direction */
++			SET_SBIC_data(sc, asr);
++		GET_SBIC_asr(sc, asr);
++	}
++
++	WAIT_CIP(sc);
++	SET_SBIC_cmd(sc, SBIC_CMD_ABORT);
++	WAIT_CIP(sc);
++
++	GET_SBIC_asr(sc, asr);
++
++	if (asr & (SBIC_ASR_BSY|SBIC_ASR_LCI)) {
++		/*
++		 * ok, get more drastic..
++		 */
++		wd33c93_reset(sc);
++	} else {
++		SET_SBIC_cmd(sc, SBIC_CMD_DISC);
++		WAIT_CIP(sc);
++
++		do {
++			SBIC_WAIT (sc, SBIC_ASR_INT, 0);
++			GET_SBIC_asr(sc, asr);
++			GET_SBIC_csr(sc, csr);
++		} while ((csr != SBIC_CSR_DISC) &&
++		    (csr != SBIC_CSR_DISC_1) &&
++		    (csr != SBIC_CSR_CMD_INVALID));
++
++	sc->sc_state = SBIC_ERROR;
++	sc->sc_flags = 0;
++	}
++	return SBIC_STATE_ERROR;
++}
++
++void
++wd33c93_timeout(struct wd33c93_softc *sc, uint8_t *cbuf, size_t clen, uint8_t *buf, size_t *lenp)
++{
++	u_char asr;
++
++	GET_SBIC_asr(sc, asr);
++
++	if (asr & SBIC_ASR_INT) {
++		/* We need to service a missed IRQ */
++		wd33c93_intr(sc, cbuf, clen, buf, lenp);
++	} else {
++		wd33c93_abort(sc, cbuf, clen, buf, lenp);
++	}
++}
++
++/*
++ * Complete current command using polled I/O.Used when interrupt driven
++ * I/O is not allowed (ie. during boot and shutdown)
++ *
++ * Polled I/O is very processor intensive
++ */
++int
++wd33c93_poll(struct wd33c93_softc *sc, uint8_t *cbuf, size_t clen, uint8_t *buf, size_t *lenp)
++{
++	u_char		asr, csr=0;
++	int			count;
++
++	SBIC_WAIT(sc, SBIC_ASR_INT, wd33c93_cmd_wait);
++	for (count = SBIC_ABORT_TIMEOUT; count;) {
++		GET_SBIC_asr (sc, asr);
++		if (asr & SBIC_ASR_LCI)
++			DELAY(5000);
++
++		if (asr & SBIC_ASR_INT) {
++			GET_SBIC_csr(sc, csr);
++			(void)wd33c93_nextstate(sc, cbuf, clen, buf, lenp, csr, asr);
++			WAIT_CIP(sc);
++		} else {
++			DELAY(5000);
++			count--;
++		}
++
++		if ((sc->xs_status & XS_STS_DONE) != 0)
++			return (0);
++	}
++	return (1);
++}
++
++static inline int
++__verify_msg_format(u_char *p, int len)
++{
++
++	if (len == 1 && MSG_IS1BYTE(p[0]))
++		return 1;
++	if (len == 2 && MSG_IS2BYTE(p[0]))
++		return 1;
++	if (len >= 3 && MSG_ISEXTENDED(p[0]) &&
++	    len == p[1] + 2)
++		return 1;
++	return 0;
++}
++
++/*
++ * Handle message_in phase
++ */
++int
++wd33c93_msgin_phase(struct wd33c93_softc *sc)
++{
++	int len;
++	u_char asr, csr, *msg;
++
++	GET_SBIC_asr(sc, asr);
++	__USE(asr);
++
++	GET_SBIC_selid (sc, csr);
++	SET_SBIC_selid (sc, csr | SBIC_SID_FROM_SCSI);
++
++	SBIC_TC_PUT(sc, 0);
++
++	SET_SBIC_control(sc, SBIC_CTL_EDI | SBIC_CTL_IDI);
++
++	msg = sc->sc_imsg;
++	len = 0;
++
++	do {
++		/* Fetch the next byte of the message */
++		RECV_BYTE(sc, *msg++);
++		len++;
++
++		/*
++		 * get the command completion interrupt, or we
++		 * can't send a new command (LCI)
++		 */
++		SBIC_WAIT(sc, SBIC_ASR_INT, 0);
++		GET_SBIC_csr(sc, csr);
++
++		if (__verify_msg_format(sc->sc_imsg, len))
++			/* Complete message received */
++			break;
++
++		/*
++		 * Clear ACK, and wait for the interrupt
++		 * for the next byte or phase change
++		 */
++		SET_SBIC_cmd(sc, SBIC_CMD_CLR_ACK);
++		SBIC_WAIT(sc, SBIC_ASR_INT, 0);
++
++		GET_SBIC_csr(sc, csr);
++	} while (len < SBIC_MAX_MSGLEN);
++
++	/*
++	 * Clear ACK, and wait for the interrupt
++	 * for the phase change
++	 */
++	SET_SBIC_cmd(sc, SBIC_CMD_CLR_ACK);
++	SBIC_WAIT(sc, SBIC_ASR_INT, 0);
++
++	/* Should still have one CSR to read */
++	return SBIC_STATE_RUNNING;
++}
++
++void
++wd33c93_scsistart(struct wd33c93_softc *sc)
++{
++	sc->xs_status = 0;
++}
++
++void
++wd33c93_scsidone(struct wd33c93_softc *sc)
++{
++	sc->xs_status = XS_STS_DONE;
++}
++
++void
++wd33c93_error(struct wd33c93_softc *sc)
++{
++}
+diff -Naru src.orig/sys/arch/sgimips/stand/common/iris_scsicmd.h src/sys/arch/sgimips/stand/common/iris_scsicmd.h
+--- src.orig/sys/arch/sgimips/stand/common/iris_scsicmd.h	1970-01-01 00:00:00.000000000 +0000
++++ src/sys/arch/sgimips/stand/common/iris_scsicmd.h	2018-08-19 06:48:54.264120997 +0000
+@@ -0,0 +1,98 @@
++/*
++ * Copyright (c) 2018 Naruaki Etomi
++ * All rights reserved.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions
++ * are met:
++ * 1. Redistributions of source code must retain the above copyright
++ *    notice, this list of conditions and the following disclaimer.
++ * 2. Redistributions in binary form must reproduce the above copyright
++ *    notice, this list of conditions and the following disclaimer in the
++ *    documentation and/or other materials provided with the distribution.
++ *
++ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
++ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
++ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
++ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
++ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
++ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
++ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
++ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
++ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++ */
++
++/*
++ * Silicon Graphics "IRIS" series MIPS processors machine bootloader.
++ */
++
++/*
++ * scsipi_xfer status flags
++ */
++#define	XS_STS_DONE		0x00000001
++
++/* SCSI Commands */
++#define CMD_TEST_UNIT_READY		0x00
++#define CMD_REQUEST_SENSE		0x03
++#define	CMD_INQUIRY				0x12
++#define CMD_SEND_DIAGNOSTIC		0x1D
++
++#define CMD_REWIND				0x01
++#define CMD_REZERO				0x01
++#define CMD_FORMAT_UNIT			0x04
++#define CMD_READ_BLOCK_LIMITS	0x05
++#define CMD_REASSIGN_BLOCKS		0x07
++#define CMD_READ				0x08
++#define CMD_WRITE				0x0A
++#define CMD_WRITE_FILEMARK		0x10
++#define CMD_SPACE				0x11
++#define CMD_MODE_SELECT			0x15
++#define CMD_RELEASE_UNIT		0x17
++#define CMD_ERASE				0x19
++#define CMD_MODE_SENSE			0x1A
++#define CMD_LOADUNLOAD			0x1B
++#define CMD_RECEIVE_DIAG		0x1C
++#define CMD_SEND_DIAG			0x1D
++#define CMD_P_A_MEDIA_REMOVAL	0x1E
++#define CMD_READ_CAPACITY		0x25
++#define CMD_READ_EXT			0x28
++#define CMD_WRITE_EXT			0x2A
++#define CMD_READ_DEFECT_DATA	0x37
++#define		SD_MANUFAC_DEFECTS	0x14000000
++#define		SD_GROWN_DEFECTS	0x0c000000
++#define CMD_READ_BUFFER			0x3B
++#define CMD_WRITE_BUFFER		0x3C
++#define CMD_READ_FULL			0xF0
++#define CMD_MEDIA_TEST			0xF1
++#define CMD_ACCESS_LOG			0xF2
++#define CMD_WRITE_FULL			0xFC
++#define CMD_MANAGE_PRIMARY		0xFD
++#define CMD_EXECUTE_DATA		0xFE
++
++/* command descriptor blocks */
++
++struct scsi_cdb6 {
++	u_char	cmd;		/* command code */
++	u_char	lun:  3,	/* logical unit on ctlr */
++		lbah: 5;	/* msb of read/write logical block addr */
++	u_char	lbam;		/* middle byte of l.b.a. */
++	u_char	lbal;		/* lsb of l.b.a. */
++	u_char	len;		/* transfer length */
++	u_char	xtra;
++};
++
++struct scsi_cdb10 {
++	u_char	cmd;		/* command code */
++	u_char	lun: 3,		/* logical unit on ctlr */
++		   : 4,
++		rel: 1;		/* l.b.a. is relative addr if =1 */
++	u_char	lbah;		/* msb of read/write logical block addr */
++	u_char	lbahm;		/* high middle byte of l.b.a. */
++	u_char	lbalm;		/* low middle byte of l.b.a. */
++	u_char	lbal;		/* lsb of l.b.a. */
++	u_char	reserved;
++	u_char	lenh;		/* msb transfer length */
++	u_char	lenl;		/* lsb transfer length */
++	u_char	xtra;
++};
+diff -Naru src.orig/sys/arch/sgimips/stand/common/iris_scsictl.c src/sys/arch/sgimips/stand/common/iris_scsictl.c
+--- src.orig/sys/arch/sgimips/stand/common/iris_scsictl.c	1970-01-01 00:00:00.000000000 +0000
++++ src/sys/arch/sgimips/stand/common/iris_scsictl.c	2018-08-19 06:48:54.278951997 +0000
+@@ -0,0 +1,111 @@
++/*
++ * Copyright (c) 2018 Naruaki Etomi
++ * All rights reserved.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions
++ * are met:
++ * 1. Redistributions of source code must retain the above copyright
++ *    notice, this list of conditions and the following disclaimer.
++ * 2. Redistributions in binary form must reproduce the above copyright
++ *    notice, this list of conditions and the following disclaimer in the
++ *    documentation and/or other materials provided with the distribution.
++ *
++ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
++ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
++ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
++ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
++ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
++ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
++ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
++ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
++ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++ */
++
++/*
++ * Silicon Graphics "IRIS" series MIPS processors machine bootloader.
++ * Front end of SCSI commands driver.
++ */
++
++#include <lib/libsa/stand.h>
++
++#include "iris_machdep.h"
++#include "iris_scsivar.h"
++#include "iris_scsicmd.h"
++
++int
++scsi_test_unit_rdy(void)
++{
++	struct wd33c93_softc *sc = &wd33c93_softc[scsi_ctlr];
++	static struct scsi_cdb6 cdb = { CMD_TEST_UNIT_READY };
++
++	return wd33c93_go(sc, (uint8_t *)&cdb, sizeof(cdb), NULL, NULL);
++}
++
++int
++scsi_readx25(uint8_t *buf, size_t olen)
++{
++	size_t len = olen;
++	size_t *lenp;
++	lenp = &len;
++
++	struct wd33c93_softc *sc = &wd33c93_softc[scsi_ctlr];
++	
++	static struct scsi_cdb10 cdb = { CMD_READ_CAPACITY };
++	return wd33c93_go(sc, (uint8_t *)&cdb, sizeof(cdb), buf, lenp);
++}
++
++int
++scsi_readx28(uint8_t *buf, size_t olen, daddr_t blk, u_int nblk)
++{
++	size_t len = olen;
++	size_t *lenp;
++	lenp = &len;
++
++
++	struct wd33c93_softc *sc = &wd33c93_softc[scsi_ctlr];
++	struct scsi_cdb10 cdb;
++	
++	memset(&cdb, 0, sizeof(cdb));
++	cdb.cmd = CMD_READ_EXT;
++	cdb.lbah = blk >> 24;
++	cdb.lbahm = blk >> 16;
++	cdb.lbalm = blk >> 8;
++	cdb.lbal = blk;
++	cdb.lenh = nblk >> (8 + DEV_BSHIFT);
++	cdb.lenl = nblk >> DEV_BSHIFT;
++	wd33c93_go(sc, (uint8_t *)&cdb, sizeof(cdb), buf, lenp);
++
++	if (*lenp == olen)
++		return 1;
++
++	return 0;
++}
++
++int
++scsi_writex2A(uint8_t *buf, size_t olen, daddr_t blk, u_int nblk)
++{
++	size_t len = olen;
++	size_t *lenp;
++	lenp = &len;
++
++	struct wd33c93_softc *sc = &wd33c93_softc[scsi_ctlr];
++	struct scsi_cdb10 cdb;
++
++	memset(&cdb, 0, sizeof(cdb));
++	cdb.cmd = CMD_WRITE_EXT;
++	cdb.lbah = blk >> 24;
++	cdb.lbahm = blk >> 16;
++	cdb.lbalm = blk >> 8;
++	cdb.lbal = blk;
++	cdb.lenh = nblk >> (8 + DEV_BSHIFT);
++	cdb.lenl = nblk >> DEV_BSHIFT;
++	wd33c93_go(sc, (uint8_t *)&cdb, sizeof(cdb), buf, lenp);
++
++	if (*lenp == olen)
++		return 1;
++
++	return 0;
++
++}
+\ No newline at end of file
+diff -Naru src.orig/sys/arch/sgimips/stand/common/iris_scsimsg.h src/sys/arch/sgimips/stand/common/iris_scsimsg.h
+--- src.orig/sys/arch/sgimips/stand/common/iris_scsimsg.h	1970-01-01 00:00:00.000000000 +0000
++++ src/sys/arch/sgimips/stand/common/iris_scsimsg.h	2018-08-19 06:48:54.279010997 +0000
+@@ -0,0 +1,91 @@
++/*
++ * Copyright (c) 2018 Naruaki Etomi
++ * All rights reserved.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions
++ * are met:
++ * 1. Redistributions of source code must retain the above copyright
++ *    notice, this list of conditions and the following disclaimer.
++ * 2. Redistributions in binary form must reproduce the above copyright
++ *    notice, this list of conditions and the following disclaimer in the
++ *    documentation and/or other materials provided with the distribution.
++ *
++ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
++ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
++ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
++ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
++ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
++ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
++ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
++ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
++ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++ */
++
++/*
++ * Silicon Graphics "IRIS" series MIPS processors machine bootloader.
++ * Most of the following was adapted from /sys/dev/scsipi/scsi_message.h.
++ */
++
++/* Messages (1 byte) */		     /* I/T (M)andatory or (O)ptional */
++#define MSG_CMDCOMPLETE		0x00 /* M/M */
++#define MSG_TASK_COMPLETE 	0x00 /* M/M */ /* SPI3 Terminology */
++#define MSG_EXTENDED		0x01 /* O/O */
++#define MSG_SAVEDATAPOINTER	0x02 /* O/O */
++#define MSG_RESTOREPOINTERS	0x03 /* O/O */
++#define MSG_DISCONNECT		0x04 /* O/O */
++#define MSG_INITIATOR_DET_ERR	0x05 /* M/M */
++#define MSG_ABORT		0x06 /* O/M */
++#define MSG_ABORT_TASK_SET	0x06 /* O/M */ /* SPI3 Terminology */
++#define MSG_MESSAGE_REJECT	0x07 /* M/M */
++#define MSG_NOOP		0x08 /* M/M */
++#define MSG_PARITY_ERROR	0x09 /* M/M */
++#define MSG_LINK_CMD_COMPLETE	0x0a /* O/O */
++#define MSG_LINK_CMD_COMPLETEF	0x0b /* O/O */
++#define MSG_BUS_DEV_RESET	0x0c /* O/M */
++#define MSG_TARGET_RESET	0x0c /* O/M */ /* SPI3 Terminology */
++#define MSG_ABORT_TAG		0x0d /* O/O */
++#define MSG_ABORT_TASK		0x0d /* O/O */ /* SPI3 Terminology */
++#define MSG_CLEAR_QUEUE		0x0e /* O/O */
++#define MSG_CLEAR_TASK_SET	0x0e /* O/O */ /* SPI3 Terminology */
++#define MSG_INIT_RECOVERY	0x0f /* O/O */ /* Deprecated in SPI3 */
++#define MSG_REL_RECOVERY	0x10 /* O/O */ /* Deprecated in SPI3 */
++#define MSG_TERM_IO_PROC	0x11 /* O/O */ /* Deprecated in SPI3 */
++#define MSG_QAS_REQUEST		0x55 /* O/O */ /* SPI3 */
++
++/* Messages (2 byte) */
++#define MSG_SIMPLE_Q_TAG	0x20 /* O/O */
++#define MSG_SIMPLE_TASK		0x20 /* O/O */ /* SPI3 Terminology */
++#define MSG_HEAD_OF_Q_TAG	0x21 /* O/O */
++#define MSG_HEAD_OF_QUEUE_TASK	0x21 /* O/O */ /* SPI3 Terminology */
++#define MSG_ORDERED_Q_TAG	0x22 /* O/O */
++#define MSG_ORDERED_TASK	0x22 /* O/O */ /* SPI3 Terminology */
++#define MSG_IGN_WIDE_RESIDUE	0x23 /* O/O */
++#define MSG_ACA_TASK		0x24 /* 0/0 */ /* SPI3 */
++
++/* Identify message */		     /* M/M */
++#define MSG_IDENTIFYFLAG	0x80
++#define MSG_IDENTIFY_DISCFLAG	0x40
++#define MSG_IDENTIFY(lun, disc)	\
++	(MSG_IDENTIFYFLAG | ((disc) ? MSG_IDENTIFY_DISCFLAG : 0) | (lun))
++#define MSG_ISIDENTIFY(m)	((m) & MSG_IDENTIFYFLAG)
++#define MSG_IDENTIFY_LUNMASK	0x3f
++
++/* Extended messages (opcode and length) */
++#define MSG_EXT_SDTR		0x01
++#define MSG_EXT_SDTR_LEN	0x03
++
++#define MSG_EXT_WDTR		0x03
++#define MSG_EXT_WDTR_LEN	0x02
++#define MSG_EXT_WDTR_BUS_8_BIT	0x00
++#define MSG_EXT_WDTR_BUS_16_BIT	0x01
++#define MSG_EXT_WDTR_BUS_32_BIT	0x02 /* Deprecated in SPI3 */
++
++#define MSG_ISEXTENDED(m)	((m) == MSG_EXTENDED)
++
++/* message length */
++#define MSG_IS1BYTE(m)							\
++	((!MSG_ISEXTENDED(m) && (m) < 0x20) ||				\
++	    (m) == MSG_QAS_REQUEST || MSG_ISIDENTIFY(m))
++#define MSG_IS2BYTE(m)		(((m) & 0xf0) == 0x20)
+\ No newline at end of file
+diff -Naru src.orig/sys/arch/sgimips/stand/common/iris_scsireg.h src/sys/arch/sgimips/stand/common/iris_scsireg.h
+--- src.orig/sys/arch/sgimips/stand/common/iris_scsireg.h	1970-01-01 00:00:00.000000000 +0000
++++ src/sys/arch/sgimips/stand/common/iris_scsireg.h	2018-08-19 06:48:54.291882997 +0000
+@@ -0,0 +1,431 @@
++/*
++ * Copyright (c) 2018 Naruaki Etomi
++ * All rights reserved.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions
++ * are met:
++ * 1. Redistributions of source code must retain the above copyright
++ *    notice, this list of conditions and the following disclaimer.
++ * 2. Redistributions in binary form must reproduce the above copyright
++ *    notice, this list of conditions and the following disclaimer in the
++ *    documentation and/or other materials provided with the distribution.
++ *
++ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
++ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
++ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
++ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
++ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
++ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
++ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
++ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
++ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++ */
++
++/*
++ * Silicon Graphics "IRIS" series MIPS processors machine bootloader.
++ * WD33C93 SCSI interface hardware description.
++ * Most of the following was adapted from sys/dev/ic/wd33c93reg.h.
++ */
++
++#define SBIC_myid 		0
++#define SBIC_cdbsize	0
++#define SBIC_control	1
++#define SBIC_timeo 		2
++#define SBIC_cdb1 		3
++#define SBIC_tsecs 		3
++#define SBIC_cdb2 		4
++#define SBIC_theads 	4
++#define SBIC_cdb3 		5
++#define SBIC_tcyl_hi	5
++#define SBIC_cdb4 		6
++#define SBIC_tcyl_lo	6
++#define SBIC_cdb5 		7
++#define SBIC_addr_hi	7
++#define SBIC_cdb6 		8
++#define SBIC_addr_2 	8
++#define SBIC_cdb7 		9
++#define SBIC_addr_3 	9
++#define SBIC_cdb8 		10
++#define SBIC_addr_lo 	10
++#define SBIC_cdb9 		11
++#define SBIC_secno		11
++#define SBIC_cdb10		12
++#define SBIC_headno		12
++#define SBIC_cdb11		13
++#define SBIC_cylno_hi	13
++#define SBIC_cdb12		14
++#define SBIC_cylno_lo	14
++#define SBIC_tlun		15
++#define SBIC_cmd_phase	16
++#define SBIC_syn		17
++#define SBIC_count_hi	18
++#define SBIC_count_med	19
++#define SBIC_count_lo	20
++#define SBIC_selid		21
++#define SBIC_rselid		22
++#define SBIC_csr		23
++#define SBIC_cmd		24
++#define SBIC_data		25
++#define SBIC_queue_tag	26
++#define	SBIC_aux_status	27
++
++/* wd33c93_asr is addressed directly */
++
++/*
++ *  Register defines
++ */
++
++/*
++ * Auxiliary Status Register
++ */
++
++#define SBIC_ASR_INT		0x80	/* Interrupt pending */
++#define SBIC_ASR_LCI		0x40	/* Last command ignored */
++#define SBIC_ASR_BSY		0x20	/* Busy, only cmd/data/asr readable */
++#define SBIC_ASR_CIP		0x10	/* Busy, cmd unavail also */
++#define SBIC_ASR_xxx		0x0c
++#define SBIC_ASR_PE			0x02	/* Parity error (even) */
++#define SBIC_ASR_DBR		0x01	/* Data Buffer Ready */
++
++/*
++ * My ID register, and/or CDB Size
++ */
++
++#define SBIC_ID_FS_8_10			0x00	/* Input clock is  8-10 MHz */
++										/* 11 MHz is invalid */
++#define SBIC_ID_FS_12_15		0x40	/* Input clock is 12-15 MHz */
++#define SBIC_ID_FS_16_20		0x80	/* Input clock is 16-20 MHz */
++#define SBIC_ID_RAF				0x20	/* Enable Really Advanced Features */
++#define SBIC_ID_EHP				0x10	/* Enable host parity */
++#define SBIC_ID_EAF				0x08	/* Enable Advanced Features */
++#define SBIC_ID_MASK			0x07
++#define SBIC_ID_CBDSIZE_MASK	0x0f	/* if unk SCSI cmd group */
++
++/*
++ * Control register
++ */
++
++#define SBIC_CTL_DMA		0x80	/* Single byte dma */
++#define SBIC_CTL_DBA_DMA	0x40	/* direct buffer access (bus master) */
++#define SBIC_CTL_BURST_DMA	0x20	/* continuous mode (8237) */
++#define SBIC_CTL_NO_DMA		0x00	/* Programmed I/O */
++#define SBIC_CTL_HHP		0x10	/* Halt on host parity error */
++#define SBIC_CTL_EDI		0x08	/* Ending disconnect interrupt */
++#define SBIC_CTL_IDI		0x04	/* Intermediate disconnect interrupt*/
++#define SBIC_CTL_HA			0x02	/* Halt on ATN */
++#define SBIC_CTL_scP		0x01	/* Halt on SCSI parity error */
++
++/*
++ * Timeout period register
++ * [val in msecs, input clk in 0.1 MHz]
++ */
++
++#define SBIC_TIMEOUT(val,clk)	((((val) * (clk)) / 800) + 1)
++
++/*
++ * CDBn registers, note that
++ *  cdb11 is used for status byte in target mode (send-status-and-cc)
++ *  cdb12 sez if linked command complete, and w/flag if so
++ */
++
++/*
++ * Target LUN register
++ * [holds target status when select-and-xfer]
++ */
++
++#define SBIC_TLUN_VALID		0x80	/* did we receive an Identify msg */
++#define SBIC_TLUN_DOK		0x40	/* Disconnect OK */
++#define SBIC_TLUN_xxx		0x38
++#define SBIC_TLUN_MASK		0x07
++
++/*
++ * Command Phase register
++ */
++
++#define SBIC_CPH_MASK		0x7f	/* values/restarts are cmd specific */
++#define SBIC_CPH(p)		((p) & SBIC_CPH_MASK)
++
++/*
++ * FIFO register
++ */
++
++#define SBIC_FIFO_93_DEPTH		5
++#define SBIC_FIFO_93AB_DEPTH		12
++
++/*
++ * maximum possible size in TC registers. Since this is 24 bit, it's easy
++ */
++#define SBIC_TC_MAX		((1 << 24) - 1)
++
++/*
++ * Synchronous xfer register
++ *
++ * NB: SBIC_SYN_FSS only valid on WD33C93B with 16-20MHz clock.
++ */
++
++#define SBIC_SYN_OFF_MASK	0x0f
++#define SBIC_SYN_93_MAX_OFFSET	(SBIC_FIFO_93_DEPTH - 1) /* 4 is recommended */
++#define SBIC_SYN_93AB_MAX_OFFSET SBIC_FIFO_93AB_DEPTH
++#define SBIC_SYN_PER_MASK	0x70
++#define SBIC_SYN_MIN_PERIOD	2	/* upto 8, encoded as 0 */
++#define SBIC_SYN_FSS		0x80	/* Enable Fast SCSI Transfers (10MB/s)*/
++
++#define SBIC_SYN(o,p,f) \
++    (((o) & SBIC_SYN_OFF_MASK) | (((p) << 4) & SBIC_SYN_PER_MASK) | \
++     ((f) ? SBIC_SYN_FSS : 0))
++
++/*
++ * Transfer count register
++ * optimal access macros depend on addressing
++ */
++
++/*
++ * Destination ID (selid) register
++ */
++
++#define SBIC_SID_SCC		0x80	/* Select command chaining (tgt) */
++#define SBIC_SID_DPD		0x40	/* Data phase direction (inittor) */
++#define SBIC_SID_FROM_SCSI	0x40
++#define SBIC_SID_TO_SCSI	0x00
++#define SBIC_SID_xxx		0x38
++#define SBIC_SID_IDMASK		0x07
++
++/*
++ * Source ID (rselid) register
++ */
++
++#define SBIC_RID_ER			0x80	/* Enable reselection */
++#define SBIC_RID_ES			0x40	/* Enable selection */
++#define SBIC_RID_DSP		0x20	/* Disable select parity */
++#define SBIC_RID_SIV		0x08	/* Source ID valid */
++#define SBIC_RID_MASK		0x07
++
++/*
++ * Status register
++ */
++
++#define SBIC_CSR_CAUSE			0xf0
++#define SBIC_CSR_RESET			0x00	/* chip was reset */
++#define SBIC_CSR_CMD_DONE		0x10	/* cmd completed */
++#define SBIC_CSR_CMD_STOPPED	0x20	/* interrupted or abrted*/
++#define SBIC_CSR_CMD_ERR		0x40	/* end with error */
++#define SBIC_CSR_BUS_SERVICE	0x80	/* REQ pending on the bus */
++
++
++#define SBIC_CSR_QUALIFIER		0x0f
++/* Reset State Interrupts */
++#define SBIC_CSR_RESET			0x00	/* reset w/advanced features*/
++#define SBIC_CSR_RESET_AM		0x01	/* reset w/advanced features*/
++/* Successful Completion Interrupts */
++#define SBIC_CSR_TARGET			0x10	/* reselect complete */
++#define SBIC_CSR_INITIATOR		0x11	/* select complete */
++#define SBIC_CSR_WO_ATN			0x13	/* tgt mode completion */
++#define SBIC_CSR_W_ATN			0x14	/* ditto */
++#define SBIC_CSR_XLATED			0x15	/* translate address cmd */
++#define SBIC_CSR_S_XFERRED		0x16	/* initiator mode completion*/
++#define SBIC_CSR_XFERRED		0x18	/* phase in low bits */
++/* Paused or Aborted Interrupts */
++#define SBIC_CSR_MSGIN_W_ACK	0x20	/* (I) msgin, ACK asserted*/
++#define SBIC_CSR_SDP			0x21	/* (I) SDP msg received */
++#define SBIC_CSR_SEL_ABRT		0x22	/* sel/resel aborted */
++#define SBIC_CSR_XFR_PAUSED		0x23	/* (T) no ATN */
++#define SBIC_CSR_XFR_PAUSED_ATN	0x24	/* (T) ATN is asserted */
++#define SBIC_CSR_RSLT_AM		0x27	/* (I) lost selection (AM) */
++#define SBIC_CSR_MIS			0x28	/* (I) xfer aborted, ph mis */
++/* Terminated Interrupts */
++#define SBIC_CSR_CMD_INVALID	0x40
++#define SBIC_CSR_DISC			0x41	/* (I) tgt disconnected */
++#define SBIC_CSR_SEL_TIMEO		0x42
++#define SBIC_CSR_PE				0x43	/* parity error */
++#define SBIC_CSR_PE_ATN			0x44	/* ditto, ATN is asserted */
++#define SBIC_CSR_XLATE_TOOBIG	0x45
++#define SBIC_CSR_RSLT_NOAM		0x46	/* (I) lost sel, no AM mode */
++#define SBIC_CSR_BAD_STATUS		0x47	/* status byte was nok */
++#define SBIC_CSR_MIS_1			0x48	/* ph mis, see low bits */
++/* Service Required Interrupts */
++#define SBIC_CSR_RSLT_NI		0x80	/* reselected, no ify msg */
++#define SBIC_CSR_RSLT_IFY		0x81	/* ditto, AM mode, got ify */
++#define SBIC_CSR_SLT			0x82	/* selected, no ATN */
++#define SBIC_CSR_SLT_ATN		0x83	/* selected with ATN */
++#define SBIC_CSR_ATN			0x84	/* (T) ATN asserted */
++#define SBIC_CSR_DISC_1			0x85	/* (I) bus is free */
++#define SBIC_CSR_UNK_GROUP		0x87	/* strange CDB1 */
++#define SBIC_CSR_MIS_2			0x88	/* (I) ph mis, see low bits */
++
++#define SBIC_PHASE(csr)		SCSI_PHASE(csr)
++
++/*
++ * Command register (command codes)
++ */
++#define SBIC_CMD_SBT		0x80	/* Single byte xfer qualifier */
++#define SBIC_CMD_MASK		0x7f
++
++		    /* Miscellaneous */
++#define SBIC_CMD_RESET		0x00	/* (DTI) lev I */
++#define SBIC_CMD_ABORT		0x01	/* (DTI) lev I */
++#define SBIC_CMD_DISC		0x04	/* ( TI) lev I */
++#define SBIC_CMD_SSCC		0x0d	/* ( TI) lev I */
++#define SBIC_CMD_SET_IDI	0x0f	/* (DTI) lev I */
++#define SBIC_CMD_XLATE		0x18	/* (DT ) lev II */
++
++		    /* Initiator state */
++#define SBIC_CMD_SET_ATN	0x02	/* (  I) lev I */
++#define SBIC_CMD_CLR_ACK	0x03	/* (  I) lev I */
++#define SBIC_CMD_XFER_PAD	0x19	/* (  I) lev II */
++#define SBIC_CMD_XFER_INFO	0x20	/* (  I) lev II */
++
++		    /* Target state */
++#define SBIC_CMD_SND_DISC		0x0e	/* ( T ) lev II */
++#define SBIC_CMD_RCV_CMD		0x10	/* ( T ) lev II */
++#define SBIC_CMD_RCV_DATA		0x11	/* ( T ) lev II */
++#define SBIC_CMD_RCV_MSG_OUT	0x12	/* ( T ) lev II */
++#define SBIC_CMD_RCV			0x13	/* ( T ) lev II */
++#define SBIC_CMD_SND_STATUS		0x14	/* ( T ) lev II */
++#define SBIC_CMD_SND_DATA		0x15	/* ( T ) lev II */
++#define SBIC_CMD_SND_MSG_IN		0x16	/* ( T ) lev II */
++#define SBIC_CMD_SND			0x17	/* ( T ) lev II */
++
++		    /* Disconnected state */
++#define SBIC_CMD_RESELECT		0x05	/* (D  ) lev II */
++#define SBIC_CMD_SEL_ATN		0x06	/* (D  ) lev II */
++#define SBIC_CMD_SEL			0x07	/* (D  ) lev II */
++#define SBIC_CMD_SEL_ATN_XFER	0x08	/* (D I) lev II */
++#define SBIC_CMD_SEL_XFER		0x09	/* (D I) lev II */
++#define SBIC_CMD_RESELECT_RECV	0x0a	/* (DT ) lev II */
++#define SBIC_CMD_RESELECT_SEND	0x0b	/* (DT ) lev II */
++#define SBIC_CMD_WAIT_SEL_RECV	0x0c	/* (DT ) lev II */
++
++
++#define PHASE_MASK		0x07	/* mask for psns/pctl phase */
++#define DATA_OUT_PHASE	0x00
++#define DATA_IN_PHASE	0x01
++#define CMD_PHASE		0x02
++#define STATUS_PHASE	0x03
++#define BUS_FREE_PHASE	0x04
++#define ARB_SEL_PHASE	0x05	/* Fuji chip combines bus arb with sel. */
++#define MESG_OUT_PHASE	0x06
++#define MESG_IN_PHASE	0x07
++
++#define SCSI_PHASE(reg)	((reg) & PHASE_MASK)
++
++#define SCSI_STATUS_MASK	0x3e	/* Mask unused bits in status byte */
++
++/*
++ * WD33C93 has two registers:
++ *    ASR  - r : Aux Status Register, w : desired register no
++ *    DATA - rw: register value
++ *
++ * We access them via separate handles because some people *cough*SGI*cough*
++ * like to keep them apart.
++ */
++
++#define wd33c93_read_reg(sc,regno,val)		\
++	do {					\
++		*(volatile u_int8_t *)(sc)->sc_asr_regh = (regno);	\
++		(val) = *(volatile u_int8_t *)(sc)->sc_data_regh;	\
++	} while (0)
++
++#define wd33c93_write_reg(sc,regno,val)		\
++	do {					\
++		*(volatile u_int8_t *)(sc)->sc_asr_regh = (regno);	\
++		*(volatile u_int8_t *)(sc)->sc_data_regh = (val);	\
++	} while (0)
++
++#define SET_SBIC_myid(sc,val)		wd33c93_write_reg(sc,SBIC_myid,val)
++#define GET_SBIC_myid(sc,val)		wd33c93_read_reg(sc,SBIC_myid,val)
++#define SET_SBIC_cdbsize(sc,val)	wd33c93_write_reg(sc,SBIC_cdbsize,val)
++#define GET_SBIC_cdbsize(sc,val)	wd33c93_read_reg(sc,SBIC_cdbsize,val)
++#define SET_SBIC_control(sc,val)	wd33c93_write_reg(sc,SBIC_control,val)
++#define GET_SBIC_control(sc,val)	wd33c93_read_reg(sc,SBIC_control,val)
++#define SET_SBIC_timeo(sc,val)		wd33c93_write_reg(sc,SBIC_timeo,val)
++#define GET_SBIC_timeo(sc,val)		wd33c93_read_reg(sc,SBIC_timeo,val)
++#define SET_SBIC_cdb1(sc,val)		wd33c93_write_reg(sc,SBIC_cdb1,val)
++#define GET_SBIC_cdb1(sc,val)		wd33c93_read_reg(sc,SBIC_cdb1,val)
++#define SET_SBIC_cdb2(sc,val)		wd33c93_write_reg(sc,SBIC_cdb2,val)
++#define GET_SBIC_cdb2(sc,val)		wd33c93_read_reg(sc,SBIC_cdb2,val)
++#define SET_SBIC_cdb3(sc,val)		wd33c93_write_reg(sc,SBIC_cdb3,val)
++#define GET_SBIC_cdb3(sc,val)		wd33c93_read_reg(sc,SBIC_cdb3,val)
++#define SET_SBIC_cdb4(sc,val)		wd33c93_write_reg(sc,SBIC_cdb4,val)
++#define GET_SBIC_cdb4(sc,val)		wd33c93_read_reg(sc,SBIC_cdb4,val)
++#define SET_SBIC_cdb5(sc,val)		wd33c93_write_reg(sc,SBIC_cdb5,val)
++#define GET_SBIC_cdb5(sc,val)		wd33c93_read_reg(sc,SBIC_cdb5,val)
++#define SET_SBIC_cdb6(sc,val)		wd33c93_write_reg(sc,SBIC_cdb6,val)
++#define GET_SBIC_cdb6(sc,val)		wd33c93_read_reg(sc,SBIC_cdb6,val)
++#define SET_SBIC_cdb7(sc,val)		wd33c93_write_reg(sc,SBIC_cdb7,val)
++#define GET_SBIC_cdb7(sc,val)		wd33c93_read_reg(sc,SBIC_cdb7,val)
++#define SET_SBIC_cdb8(sc,val)		wd33c93_write_reg(sc,SBIC_cdb8,val)
++#define GET_SBIC_cdb8(sc,val)		wd33c93_read_reg(sc,SBIC_cdb8,val)
++#define SET_SBIC_cdb9(sc,val)		wd33c93_write_reg(sc,SBIC_cdb9,val)
++#define GET_SBIC_cdb9(sc,val)		wd33c93_read_reg(sc,SBIC_cdb9,val)
++#define SET_SBIC_cdb10(sc,val)		wd33c93_write_reg(sc,SBIC_cdb10,val)
++#define GET_SBIC_cdb10(sc,val)		wd33c93_read_reg(sc,SBIC_cdb10,val)
++#define SET_SBIC_cdb11(sc,val)		wd33c93_write_reg(sc,SBIC_cdb11,val)
++#define GET_SBIC_cdb11(sc,val)		wd33c93_read_reg(sc,SBIC_cdb11,val)
++#define SET_SBIC_cdb12(sc,val)		wd33c93_write_reg(sc,SBIC_cdb12,val)
++#define GET_SBIC_cdb12(sc,val)		wd33c93_read_reg(sc,SBIC_cdb12,val)
++#define SET_SBIC_tlun(sc,val)		wd33c93_write_reg(sc,SBIC_tlun,val)
++#define GET_SBIC_tlun(sc,val)		wd33c93_read_reg(sc,SBIC_tlun,val)
++#define SET_SBIC_cmd_phase(sc,val)	wd33c93_write_reg(sc,SBIC_cmd_phase,val)
++#define GET_SBIC_cmd_phase(sc,val)	wd33c93_read_reg(sc,SBIC_cmd_phase,val)
++#define SET_SBIC_syn(sc,val)		wd33c93_write_reg(sc,SBIC_syn,val)
++#define GET_SBIC_syn(sc,val)		wd33c93_read_reg(sc,SBIC_syn,val)
++#define SET_SBIC_count_hi(sc,val)	wd33c93_write_reg(sc,SBIC_count_hi,val)
++#define GET_SBIC_count_hi(sc,val)	wd33c93_read_reg(sc,SBIC_count_hi,val)
++#define SET_SBIC_count_med(sc,val)	wd33c93_write_reg(sc,SBIC_count_med,val)
++#define GET_SBIC_count_med(sc,val)	wd33c93_read_reg(sc,SBIC_count_med,val)
++#define SET_SBIC_count_lo(sc,val)	wd33c93_write_reg(sc,SBIC_count_lo,val)
++#define GET_SBIC_count_lo(sc,val)	wd33c93_read_reg(sc,SBIC_count_lo,val)
++#define SET_SBIC_selid(sc,val)		wd33c93_write_reg(sc,SBIC_selid,val)
++#define GET_SBIC_selid(sc,val)		wd33c93_read_reg(sc,SBIC_selid,val)
++#define SET_SBIC_rselid(sc,val)		wd33c93_write_reg(sc,SBIC_rselid,val)
++#define GET_SBIC_rselid(sc,val)		wd33c93_read_reg(sc,SBIC_rselid,val)
++#define SET_SBIC_csr(sc,val)		wd33c93_write_reg(sc,SBIC_csr,val)
++#define GET_SBIC_csr(sc,val)		wd33c93_read_reg(sc,SBIC_csr,val)
++#define SET_SBIC_cmd(sc,val)		wd33c93_write_reg(sc,SBIC_cmd,val)
++#define GET_SBIC_cmd(sc,val)		wd33c93_read_reg(sc,SBIC_cmd,val)
++#define SET_SBIC_data(sc,val)		wd33c93_write_reg(sc,SBIC_data,val)
++#define GET_SBIC_data(sc,val)		wd33c93_read_reg(sc,SBIC_data,val)
++#define SET_SBIC_queue_tag(sc,val)	wd33c93_write_reg(sc,SBIC_queue_tag,val)
++#define GET_SBIC_queue_tag(sc,val)	wd33c93_read_reg(sc,SBIC_queue_tag,val)
++
++#define SBIC_TC_PUT(sc,val)						\
++    do {								\
++	wd33c93_write_reg(sc,SBIC_count_hi,((val)>>16));		\
++	*(volatile u_int8_t *)(sc)->sc_data_regh = (val) >> 8;       			\
++	*(volatile u_int8_t *)(sc)->sc_data_regh = (val);				\
++    } while (0)
++
++#define GET_SBIC_asr(sc,val)						\
++    do {								\
++	(val) = *(volatile u_int8_t *)(sc)->sc_asr_regh;	\
++    } while (0)
++
++#define WAIT_CIP(sc)							\
++	do {								\
++		while (*(volatile u_int8_t *)(sc)->sc_asr_regh & SBIC_ASR_CIP)			\
++			;						\
++	} while (0)
++
++/*
++ * transmit a byte in programmed I/O mode
++ */
++#define SEND_BYTE(sc, ch)						\
++    do {								\
++	WAIT_CIP(sc);							\
++	SET_SBIC_cmd(sc, SBIC_CMD_SBT | SBIC_CMD_XFER_INFO);		\
++	SBIC_WAIT(sc, SBIC_ASR_DBR, 0);					\
++	SET_SBIC_data(sc, ch);						\
++    } while (0)
++
++/*
++ * receive a byte in programmed I/O mode
++ */
++#define RECV_BYTE(sc, ch)						\
++	do {								\
++		WAIT_CIP(sc);						\
++		SET_SBIC_cmd(sc, SBIC_CMD_SBT | SBIC_CMD_XFER_INFO);	\
++		SBIC_WAIT(sc, SBIC_ASR_DBR, 0);			\
++		GET_SBIC_data(sc, ch);				\
++	} while (0)
+diff -Naru src.orig/sys/arch/sgimips/stand/common/iris_scsivar.h src/sys/arch/sgimips/stand/common/iris_scsivar.h
+--- src.orig/sys/arch/sgimips/stand/common/iris_scsivar.h	1970-01-01 00:00:00.000000000 +0000
++++ src/sys/arch/sgimips/stand/common/iris_scsivar.h	2018-08-19 06:48:54.298631997 +0000
+@@ -0,0 +1,121 @@
++/*
++ * Copyright (c) 2018 Naruaki Etomi
++ * All rights reserved.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions
++ * are met:
++ * 1. Redistributions of source code must retain the above copyright
++ *    notice, this list of conditions and the following disclaimer.
++ * 2. Redistributions in binary form must reproduce the above copyright
++ *    notice, this list of conditions and the following disclaimer in the
++ *    documentation and/or other materials provided with the distribution.
++ *
++ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
++ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
++ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
++ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
++ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
++ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
++ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
++ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
++ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++ */
++
++/*
++ * Silicon Graphics "IRIS" series MIPS processors machine bootloader.
++ * WD33C93 SCSI interface parameter description.
++ */
++
++#ifndef _SCSIVAR_H_
++#define _SCSIVAR_H_
++
++#define SBIC_MAX_MSGLEN	8
++#define	SBIC_ABORT_TIMEOUT	2000	/* time to wait for abort */
++
++/*
++ * SCSI delays
++ * In u-seconds, primarily for state changes on the SPC.
++ */
++#define SBIC_CMD_WAIT	50000	/* wait per step of 'immediate' cmds */
++#define SBIC_DATA_WAIT	50000	/* wait per data in/out step */
++#define SBIC_INIT_WAIT	50000	/* wait per step (both) during init */
++
++#define NSCSI			1
++#define SCSI_LUN		0
++#define SCSI_CLKFREQ	20 
++
++struct	wd33c93_softc {
++	volatile uint8_t	*sc_asr_regh;   /* address register */
++	volatile uint8_t	*sc_data_regh;  /* data register */
++	uint8_t  sc_target;					/* Currently active target */
++	uint8_t  sc_syncperiods;			/* Sync transfer periods (4ns units) */
++	u_short	sc_state;
++	u_short	sc_status;
++	int	sc_flags;
++	u_char	sc_imsg[SBIC_MAX_MSGLEN];
++	u_char	sc_omsg[SBIC_MAX_MSGLEN];
++	volatile int xs_status;				/* status flags */
++};
++
++struct wd33c93_softc wd33c93_softc[NSCSI];
++
++extern uint8_t scsi_ctlr, scsi_id, scsi_part;
++
++/* values for sc_flags */
++#define SBICF_SELECTED	0x01	/* bus is in selected state. */
++#define SBICF_NODMA		0x02	/* Polled transfer */
++#define SBICF_INDMA		0x04	/* DMA I/O in progress */
++#define SBICF_SYNCNEGO	0x08	/* Sync negotiation in progress */
++#define SBICF_ABORTING	0x10	/* Aborting */
++
++/* values for sc_state */
++#define SBIC_UNINITIALIZED	0	/* Driver not initialized */
++#define SBIC_IDLE			1	/* waiting for something to do */
++#define SBIC_SELECTING		2	/* SCSI command is arbiting */
++#define SBIC_RESELECTED		3	/* Has been reselected */
++#define SBIC_IDENTIFIED		4	/* Has gotten IFY but not TAG */
++#define SBIC_CONNECTED		5	/* Actively using the SCSI bus */
++#define	SBIC_DISCONNECT		6	/* MSG_DISCONNECT received */
++#define	SBIC_CMDCOMPLETE 	7	/* MSG_CMDCOMPLETE received */
++#define	SBIC_ERROR			8	/* Error has occurred */
++#define SBIC_SELTIMEOUT		9	/* Select Timeout */
++#define	SBIC_CLEANING		10	/* Scrubbing ACB's */
++#define SBIC_BUSRESET		11	/* SCSI RST has been issued */
++
++/* values for sc_msgout */
++#define SEND_DEV_RESET		0x0001
++#define SEND_PARITY_ERROR	0x0002
++#define SEND_INIT_DET_ERR	0x0004
++#define SEND_REJECT			0x0008
++#define SEND_IDENTIFY		0x0010
++#define SEND_ABORT			0x0020
++#define SEND_WDTR			0x0040
++#define SEND_SDTR			0x0080
++#define SEND_TAG			0x0100
++
++#define	STS_CHECKCOND	0x02	/* Check Condition (ie., read sense) */
++
++/*
++ * States returned by our state machine
++ */
++#define SBIC_STATE_ERROR		-1
++#define SBIC_STATE_DONE			0
++#define SBIC_STATE_RUNNING		1
++#define SBIC_STATE_DISCONNECT	2
++
++#define DEBUG_ACBS	0x01
++#define DEBUG_INTS	0x02
++#define DEBUG_CMDS	0x04
++#define DEBUG_MISC	0x08
++#define DEBUG_TRAC	0x10
++#define DEBUG_RSEL	0x20
++#define DEBUG_PHASE	0x40
++#define DEBUG_DMA	0x80
++#define DEBUG_CCMDS	0x100
++#define DEBUG_MSGS	0x200
++#define DEBUG_TAGS	0x400
++#define DEBUG_SYNC	0x800
++
++#endif /* _SCSIVAR_H_ */
+\ No newline at end of file
+diff -Naru src.orig/sys/arch/sgimips/stand/common/iris_start.S src/sys/arch/sgimips/stand/common/iris_start.S
+--- src.orig/sys/arch/sgimips/stand/common/iris_start.S	1970-01-01 00:00:00.000000000 +0000
++++ src/sys/arch/sgimips/stand/common/iris_start.S	2018-08-19 06:48:54.295808997 +0000
+@@ -0,0 +1,65 @@
++/*
++ * Copyright (c) 2018 Naruaki Etomi
++ * All rights reserved.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions
++ * are met:
++ * 1. Redistributions of source code must retain the above copyright
++ *    notice, this list of conditions and the following disclaimer.
++ * 2. Redistributions in binary form must reproduce the above copyright
++ *    notice, this list of conditions and the following disclaimer in the
++ *    documentation and/or other materials provided with the distribution.
++ *
++ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
++ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
++ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
++ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
++ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
++ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
++ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
++ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
++ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++ */
++
++/*
++ * Silicon Graphics "IRIS" series MIPS processors machine bootloader.
++ */
++
++#include <mips/asm.h>
++#include <mips/cpuregs.h>
++
++	.globl	start
++start:
++	.set	noreorder
++#ifdef __GP_SUPPORT__
++	la      gp, _C_LABEL (_gp)
++#endif
++	/*
++	 * We assume the bootprom isn't expecting us to preserve the saved
++	 * registers.
++	 */
++	move	s0, a0				# save argc
++	move	s1, a1				# save argv
++	move	s2, a2				# save envp
++	move	s3, ra				# save RA
++
++	la	a0, _C_LABEL (edata)	# clear BSS
++	move	a1, zero
++	la	a2, _C_LABEL (end)
++	jal	_C_LABEL(memset)		# memset(edata, 0, end - edata)
++	subu	a2, a2, a0
++
++	move	a0, s0				# restore argc
++	move	a1, s1				# restore argv
++	move	a2, s2				# restore envp
++	j	_C_LABEL(main)			# main(argc, argv)
++	move	ra, s3				# restore RA
++
++LEAF(romrestart)
++XLEAF(_rtt)
++	PTR_LA v0,   0xBFC00000		# indigo RESET
++    j      v0
++	nop
++END(romrestart)
+\ No newline at end of file
+diff -Naru src.orig/sys/arch/sgimips/stand/common/iris_zs.c src/sys/arch/sgimips/stand/common/iris_zs.c
+--- src.orig/sys/arch/sgimips/stand/common/iris_zs.c	1970-01-01 00:00:00.000000000 +0000
++++ src/sys/arch/sgimips/stand/common/iris_zs.c	2018-08-19 08:10:32.663423993 +0000
+@@ -0,0 +1,227 @@
++/*
++ * Copyright (c) 2018 Naruaki Etomi
++ * All rights reserved.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions
++ * are met:
++ * 1. Redistributions of source code must retain the above copyright
++ *    notice, this list of conditions and the following disclaimer.
++ * 2. Redistributions in binary form must reproduce the above copyright
++ *    notice, this list of conditions and the following disclaimer in the
++ *    documentation and/or other materials provided with the distribution.
++ *
++ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
++ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
++ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
++ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
++ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
++ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
++ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
++ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
++ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++ */
++
++/*
++ * Silicon Graphics "IRIS" series MIPS processors machine bootloader.
++ * Zilog Z8530 Dual UART driver.
++ * Most of the following was adapted from /sys/arch/sgimips/dev/zs.c.
++ */
++
++#include <lib/libsa/stand.h>
++#include <lib/libkern/libkern.h>
++
++#include <dev/ic/z8530reg.h>
++
++#include <mips/cpuregs.h>
++#include <machine/cpu.h>
++
++#include "iris_machdep.h"
++#include "iris_zs.h"
++
++#define ZSCLOCK		3672000	 /* PCLK pin input clock rate */
++#define ZS_DELAY()	DELAY(3)
++#define ZS_DEFSPEED	9600
++
++static void zs_write(void *, uint8_t);
++static void zs_write_reg(void *, uint8_t, uint8_t);
++static void zs_reset(void *);
++static struct zschan *zs_get_chan_addr (int zs_unit, int channel);
++int		zs_getc (void *);
++void	zs_putc (void *, int);
++int		zs_scan (void *);
++
++static int  cons_port;
++
++static void
++zs_write(void *dev, uint8_t val)
++{
++	register volatile struct zschan *zc = dev;
++
++	zc->zc_csr = val;
++	ZS_DELAY();
++}
++
++static void
++zs_write_reg(void *dev, uint8_t reg, uint8_t val)
++{
++
++	zs_write(dev, reg);
++	zs_write(dev, val);
++}
++
++static void
++zs_reset(void *dev)
++{
++	/* clear errors */
++	zs_write_reg(dev,  9, 0);
++	/* hardware reset */
++	zs_write_reg(dev,  9, ZSWR9_HARD_RESET);
++	DELAY(1000);
++
++	/* disable all inerttupts */
++	zs_write_reg(dev,  1, 0);
++
++	/* set TX/RX misc parameters and modes */
++	zs_write_reg(dev,  4, ZSWR4_CLK_X16 | ZSWR4_ONESB | ZSWR4_EVENP);
++	zs_write_reg(dev, 10, ZSWR10_NRZ);
++	zs_write_reg(dev,  3, ZSWR3_RX_8);
++	zs_write_reg(dev,  5, ZSWR5_TX_8 | ZSWR5_DTR | ZSWR5_RTS);
++
++	/* sync registers unused */
++	zs_write_reg(dev,  6, 0);
++	zs_write_reg(dev,  7, 0);
++
++	/* set clock mode */
++	zs_write_reg(dev, 11, ZSWR11_RXCLK_BAUD | ZSWR11_TXCLK_BAUD | ZSWR11_TRXC_OUT_ENA);
++
++	/* set baud rate constant */
++	zs_write_reg(dev, 12, BPS_TO_TCONST(ZSCLOCK / 16, ZS_DEFSPEED));
++	zs_write_reg(dev, 13, 0);
++
++	/* enable baud rate generator */
++	zs_write_reg(dev, 14, ZSWR14_BAUD_ENA);
++
++	/* disable all external interrupts */
++	zs_write_reg(dev, 15, 0);
++
++	/* reset external status twice (see src/sys/dev/ic/z8530sc.c) */
++	zs_write(dev, ZSWR0_RESET_STATUS);
++	zs_write(dev, ZSWR0_RESET_STATUS);
++
++	/* enable TX and RX */
++	zs_write_reg(dev,  3, ZSWR3_RX_8 | ZSWR3_RX_ENABLE);
++	zs_write_reg(dev,  5,
++	    ZSWR5_TX_8 | ZSWR5_DTR | ZSWR5_RTS | ZSWR5_TX_ENABLE);
++}
++
++static struct zschan *
++zs_get_chan_addr(int zs_unit, int channel)
++{
++	struct zsdevice *addr;
++	struct zschan *zc;
++
++	addr = (struct zsdevice *) MIPS_PHYS_TO_KSEG1(ZS_ADDR);
++
++	zc = &addr->zs_chan_b;
++
++	return (zc);
++}
++
++void *
++zs_init(int addr, int speed)
++{
++	struct zschan *zs;
++	cons_port = 0;
++
++	zs = zs_get_chan_addr(1, cons_port);
++
++	zs_reset(zs);
++
++	return zs;
++}
++
++void
++zscnputc(void *dev, int c)
++{
++	struct zschan *zs;
++
++	zs = zs_get_chan_addr(1, cons_port);
++
++	zs_putc(zs, c);
++}
++
++void
++zs_putc(void *arg, int c)
++{
++	register volatile struct zschan *zc = arg;
++	register int rr0;
++
++	/* Wait for transmitter to become ready. */
++	do {
++		rr0 = zc->zc_csr;
++		ZS_DELAY();
++	} while ((rr0 & ZSRR0_TX_READY) == 0);
++
++	zc->zc_data = c;
++	ZS_DELAY();
++}
++
++int
++zscngetc(void *dev)
++{
++	struct zschan *zs;
++
++	zs = zs_get_chan_addr(1, cons_port);
++
++	return zs_getc(zs);
++}
++
++int
++zs_getc(void *arg)
++{
++	register volatile struct zschan *zc = arg;
++	register int c, rr0;
++
++	/* Wait for a character to arrive. */
++	do {
++		rr0 = zc->zc_csr;
++		ZS_DELAY();
++	} while ((rr0 & ZSRR0_RX_READY) == 0);
++
++	c = zc->zc_data;
++	ZS_DELAY();
++
++	return (c);
++}
++
++int
++zscnscanc(void *dev)
++{
++	struct zschan *zs;
++
++	zs = zs_get_chan_addr(1, cons_port);
++
++	return zs_scan(zs);
++}
++
++int
++zs_scan(void *arg)
++{
++	register volatile struct zschan *zc = arg;
++	register int c, rr0;
++
++	/* Wait for a character to arrive. */
++	rr0 = zc->zc_csr;
++	ZS_DELAY();
++
++	if ((rr0 & ZSRR0_RX_READY) == 0) {
++			return -1;
++		}
++
++	c = zc->zc_data;
++	ZS_DELAY();
++
++	return (c);
++}
+\ No newline at end of file
+diff -Naru src.orig/sys/arch/sgimips/stand/common/iris_zs.h src/sys/arch/sgimips/stand/common/iris_zs.h
+--- src.orig/sys/arch/sgimips/stand/common/iris_zs.h	1970-01-01 00:00:00.000000000 +0000
++++ src/sys/arch/sgimips/stand/common/iris_zs.h	2018-08-19 06:48:54.312248997 +0000
+@@ -0,0 +1,46 @@
++/*
++ * Copyright (c) 2018 Naruaki Etomi
++ * All rights reserved.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions
++ * are met:
++ * 1. Redistributions of source code must retain the above copyright
++ *    notice, this list of conditions and the following disclaimer.
++ * 2. Redistributions in binary form must reproduce the above copyright
++ *    notice, this list of conditions and the following disclaimer in the
++ *    documentation and/or other materials provided with the distribution.
++ *
++ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
++ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
++ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
++ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
++ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
++ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
++ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
++ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
++ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++ */
++
++/*
++ * Silicon Graphics "IRIS" series MIPS processors machine bootloader.
++ */
++
++/* The layout of this is hardware-dependent (padding, order). */
++struct zschan {
++	uint8_t pad1[3];
++	volatile uint8_t zc_csr;	/* ctrl,status, and indirect access */
++	uint8_t pad2[3];
++	volatile uint8_t zc_data;	/* data */
++};
++
++struct zsdevice {
++	struct	zschan zs_chan_b;
++	struct	zschan zs_chan_a;
++};
++
++void *zs_init(int, int);
++int  zscngetc (void *);
++void zscnputc (void *, int);
++int zscnscanc(void *);
+\ No newline at end of file
